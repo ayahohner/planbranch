@@ -82,6 +82,10 @@ The prototype only describes the Executor and never invokes it.
 
 A concise kebab-case action identifier describing how a Primitive Task could be performed, such as `draft-hero-copy`, `extract-brand-colors`, or `run-accessibility-audit`.
 
+### Populate Root Brief
+
+Use the Root Title and Description to generate or refresh the ordered Goals and Input Artifact Labels. Existing useful entries are preserved, weak placeholders may be replaced, and every other field and Task remains unchanged.
+
 ### Decompose
 
 Use the model to turn the selected Task into an ordered subtree. Decomposing a Primitive Task removes its Operator inside the pending transaction before children are added.
@@ -98,7 +102,7 @@ The collapsed Task becomes Primitive when the model can declare a defensible dir
 
 ### Run
 
-One Decompose, Optimize Subtree, or Collapse Task operation. A successful Run commits as one undoable transaction. A failed or cancelled Run commits nothing.
+One Populate Root Brief, Decompose, Optimize Subtree, or Collapse Task operation. A successful Run commits as one undoable transaction. A failed or cancelled Run commits nothing.
 
 ### Attempt
 
@@ -191,6 +195,12 @@ Only the Root Task may contain `goals`. IDs are application-generated UUIDs and 
 - A new tree begins with one editable Root Task.
 - The Root Task exposes Title, Description, Goals, Inputs, and Outputs.
 - Goals are an ordered list of plain-text outcomes.
+- The Root exposes a **Generate Goals & Inputs** action.
+- Generate Goals & Inputs is enabled only when both Title and Description contain non-whitespace text.
+- The action may replace only the Root Goals and Inputs. It must preserve the Root Title, Description, Outputs, Operator, children, and every non-Root Task.
+- Generated Goals are concise, testable outcomes rather than implementation steps.
+- Generated Inputs are Title Case Artifact Labels for information or materials required to pursue the Goals.
+- The model preserves useful existing Goals and Inputs, removes synonyms and weak placeholders, and does not invent specific facts absent from the brief.
 - The primary Root action is Decompose.
 
 ### 6.2 Task Rendering
@@ -240,6 +250,20 @@ Run feedback is an overlay rather than another semantic color:
 - The model creates ordered children, revises their fields, and declares Operators for Primitive leaves.
 - Unresolved leaves are allowed when the Run reaches its budget or the model cannot defend a direct Operator.
 - Decomposing an existing Primitive Task clears its Operator within the draft transaction.
+
+### 6.4a Populate Root Brief
+
+- Populate Root Brief is available only on the Root Task through **Generate Goals & Inputs**.
+- The complete Task Tree is supplied as read-only context.
+- The Root Title and Description are the authoritative source for the generated values.
+- The model calls `revise_task` once for Goals and once for Inputs so each field materializes independently in the active Run overlay.
+- Each call replaces the complete ordered list for that field.
+- Goals contain 1–8 concise outcome statements.
+- Inputs contain 0–12 distinct Title Case Artifact Labels.
+- Existing useful entries should remain; placeholder, duplicative, or unsupported entries may be removed.
+- The model must not add Tasks, declare an Operator, change Outputs, or change any structural data.
+- Structural and semantic validation confirm that only Goals and Inputs changed and that both lists align with the Title and Description.
+- Success commits one undoable history entry. Failure or cancellation restores the original Root Brief.
 
 ### 6.5 Optimize Subtree
 
@@ -355,6 +379,8 @@ Replaces only supplied fields. At least one revisable field is required. `goals`
 
 The model should use semantic field-sized revisions rather than character append calls. This keeps the tool surface understandable and allows precise per-field highlights.
 
+During Populate Root Brief, `revise_task` accepts only `goals` or `inputs` for the Root, one field per call. All other fields and Task IDs are rejected.
+
 ### 8.3 `declare_operator`
 
 ```ts
@@ -428,6 +454,8 @@ Every planning prompt must include the shared vocabulary and these rules:
 12. End by calling `finish_run`.
 
 Action prompts add the target, writable scope, Root Goals, relevant ancestor path, tree context, and budgets.
+
+The Populate Root Brief prompt additionally requires separate field-sized `revise_task` calls for `goals` and `inputs`, forbids every other mutation, and treats the existing lists as suggestions rather than facts.
 
 ## 10. Run, Streaming, Validation, and Retry Model
 
@@ -616,7 +644,7 @@ DELETE /api/runs/:runId
 
 ```ts
 interface StartRunRequest {
-  action: "decompose" | "optimize" | "collapse";
+  action: "populate" | "decompose" | "optimize" | "collapse";
   tree: TaskTree;
   targetTaskId: string;
 }
@@ -651,6 +679,7 @@ The response is `202 Accepted` with a `runId`. `run.completed` contains the vali
 
 ### Node Actions
 
+- Generate Goals & Inputs on the Root
 - Decompose
 - Optimize (node and subnodes)
 - Collapse when Compound
@@ -692,6 +721,7 @@ Do not display raw chain-of-thought.
 - Artifact and Operator validation
 - Add, revise, move, and Collapse operations
 - Collapse preserves the selected Task ID and removes only descendants
+- Populate Root Brief changes only Goals and Inputs
 - Undo/redo patch behavior
 - JSON import/export round trips
 
@@ -715,10 +745,12 @@ Use a deterministic fake Ollama stream to test:
 - Exhausted retries and rollback
 - Cancellation
 - SSE reconnection
+- Populate Root Brief streams Goals and Inputs as separate revisions
 
 ### End-to-End Tests
 
 - Create a startup marketing brief and decompose it in browser.
+- Enter a Root Title and Description, generate Goals and Inputs, then undo and redo the Run.
 - Decompose an Unresolved or Primitive leaf.
 - Optimize a middle subtree without changing external siblings.
 - Collapse a Compound Task, inspect the staged UI, and commit.
@@ -732,7 +764,7 @@ Use a deterministic fake Ollama stream to test:
 On the target M2 Max:
 
 - Verify `gemma4:26b-mlx` loads without memory pressure at 32K context.
-- Record prompt-evaluation and generation tokens per second for representative Decompose, Optimize, and Collapse prompts.
+- Record prompt-evaluation and generation tokens per second for representative Populate, Decompose, Optimize, and Collapse prompts.
 - Compare with an already-installed compatible quantized 26B model only if the MLX build is unstable or unexpectedly slower.
 
 ## 16. Acceptance Criteria
@@ -740,20 +772,21 @@ On the target M2 Max:
 The prototype is complete when:
 
 1. A user can enter a Root Title, Description, Goals, Inputs, and Outputs.
-2. Decompose creates and links visible Tasks incrementally through Ollama tool calls.
-3. Every Task field is editable inline.
-4. Compound, Primitive, and Unresolved Tasks are visually distinct.
-5. Primitive Tasks show an Executor and Operator but cannot be executed.
-6. Decompose is correctly scoped to the selected Task.
-7. Optimize can revise only the selected subtree and highlights existing changed fields in green.
-8. Collapse keeps the selected Task, removes only its descendants after validation, and is fully undoable.
-9. No general delete or fold behavior exists.
-10. Failed tool calls, validation errors, retry attempts, cancellation, and final rollback are visible.
-11. A failed Run leaves the committed tree and undo history unchanged.
-12. Undo and redo work for user edits and successful model Runs.
-13. JSON export/import round-trips all semantic data and no layout data.
-14. The app runs locally against `gemma4:26b-mlx` through Ollama.
-15. No described Operator is executed.
+2. Generate Goals & Inputs streams aligned Root Goals and Inputs, changes no other semantic or structural data, and is undoable.
+3. Decompose creates and links visible Tasks incrementally through Ollama tool calls.
+4. Every Task field is editable inline.
+5. Compound, Primitive, and Unresolved Tasks are visually distinct.
+6. Primitive Tasks show an Executor and Operator but cannot be executed.
+7. Decompose is correctly scoped to the selected Task.
+8. Optimize can revise only the selected subtree and highlights existing changed fields in green.
+9. Collapse keeps the selected Task, removes only its descendants after validation, and is fully undoable.
+10. No general delete or fold behavior exists.
+11. Failed tool calls, validation errors, retry attempts, cancellation, and final rollback are visible.
+12. A failed Run leaves the committed tree and undo history unchanged.
+13. Undo and redo work for user edits and successful model Runs.
+14. JSON export/import round-trips all semantic data and no layout data.
+15. The app runs locally against `gemma4:26b-mlx` through Ollama.
+16. No described Operator is executed.
 
 ## 17. Recommended Implementation Order
 
@@ -761,8 +794,9 @@ The prototype is complete when:
 2. Build the React Flow editor, Root brief, inline editing, derived styling, Dagre layout, and undo/redo.
 3. Build the Fastify health endpoint, Ollama configuration, Run registry, and SSE transport.
 4. Implement the agent loop and the six domain tools.
-5. Add Decompose with live overlay events.
-6. Add Optimize Subtree and strict scope enforcement.
-7. Add Collapse Task and staged descendant removal.
-8. Add structural and semantic validation, retries, cancellation, diagnostics, and rollback.
-9. Complete automated tests and benchmark the model on the target Mac.
+5. Add Populate Root Brief with field-by-field Goal and Input revisions.
+6. Add Decompose with live overlay events.
+7. Add Optimize Subtree and strict scope enforcement.
+8. Add Collapse Task and staged descendant removal.
+9. Add structural and semantic validation, retries, cancellation, diagnostics, and rollback.
+10. Complete automated tests and benchmark the model on the target Mac.
