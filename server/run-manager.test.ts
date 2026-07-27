@@ -8,7 +8,6 @@ import {
 } from "../packages/domain/src";
 import type { ServerConfig } from "./config";
 import type {
-  ModelChatRequest,
   ModelClient,
   ModelHealth,
   ModelMessage,
@@ -44,20 +43,14 @@ class FakeModel implements ModelClient {
     private readonly completions: ModelMessage[] = [],
   ) {}
 
-  async *streamChat(
-    _request: ModelChatRequest,
-    _signal: AbortSignal,
-  ): AsyncIterable<ModelMessage> {
+  async *streamChat(): AsyncIterable<ModelMessage> {
     const next = this.streams.shift();
     if (!next) throw new Error("Missing fake stream response.");
     if (next instanceof Error) throw next;
     yield next;
   }
 
-  async completeChat(
-    _request: ModelChatRequest,
-    _signal: AbortSignal,
-  ): Promise<ModelMessage> {
+  async completeChat(): Promise<ModelMessage> {
     const next = this.completions.shift();
     if (!next) throw new Error("Missing fake completion response.");
     return next;

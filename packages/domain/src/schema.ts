@@ -54,16 +54,15 @@ function enforceTaskKind(
   }
 }
 
-let recursiveTaskSchema: z.ZodType<Task>;
-recursiveTaskSchema = z
-  .object({
-    ...taskTextShape,
-    children: z.lazy(() => z.array(recursiveTaskSchema).max(500)),
-  })
-  .strict()
-  .superRefine(enforceTaskKind);
-
-export const taskSchema = recursiveTaskSchema;
+export const taskSchema: z.ZodType<Task> = z.lazy(() =>
+  z
+    .object({
+      ...taskTextShape,
+      children: z.array(taskSchema).max(500),
+    })
+    .strict()
+    .superRefine(enforceTaskKind),
+);
 
 export const rootTaskSchema: z.ZodType<RootTask> = z
   .object({

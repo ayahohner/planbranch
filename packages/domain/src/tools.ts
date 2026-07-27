@@ -19,11 +19,10 @@ export const reviseTaskInputSchema = z
     goals: z.array(z.string().trim().min(1).max(500)).min(1).max(50).optional(),
   })
   .strict()
-  .refine(
-    ({ task_id: _taskId, ...patch }) =>
-      Object.values(patch).some((value) => value !== undefined),
-    "At least one Task field must be supplied.",
-  );
+  .refine(({ title, description, inputs, outputs, goals }) =>
+    [title, description, inputs, outputs, goals].some(
+      (value) => value !== undefined,
+    ), "At least one Task field must be supplied.");
 
 export const declareOperatorInputSchema = z
   .object({

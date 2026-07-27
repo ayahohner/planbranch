@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import "@xyflow/react/dist/style.css";
 import "./globals.css";
+import "./task-tree/task-tree.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,12 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Starter Project",
-  description: "A clean starting point for building your site.",
-  icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
-  },
+  title: "Task Tree",
+  description:
+    "A local, observable workspace for decomposing complex work into ordered Tasks.",
 };
 
 export default function RootLayout({

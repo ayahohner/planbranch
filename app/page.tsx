@@ -1,15 +1,12 @@
 import type { Metadata } from "next";
-import { SkeletonPreview } from "./_sites-preview/SkeletonPreview";
+import { TaskTreeApp } from "./task-tree/task-tree-app";
 
 export const metadata: Metadata = {
-  title: "Your site is taking shape",
+  title: "Task Tree",
   description:
-    "Your first version will appear here automatically when it’s ready.",
-  other: {
-    "codex-preview": "development",
-  },
+    "A local, observable workspace for decomposing complex work into ordered Tasks.",
 };
 
 export default function Home() {
-  return <SkeletonPreview />;
+  return <TaskTreeApp />;
 }
