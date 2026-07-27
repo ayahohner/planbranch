@@ -77,15 +77,18 @@ interface PendingRequest {
 
 type NotificationHandler = (message: RpcMessage) => void;
 type ServerRequestHandler = (message: RpcMessage) => void;
+type FailureHandler = (error: Error) => void;
 
 class CodexConnection {
   private readonly process: ChildProcessWithoutNullStreams;
   private readonly pending = new Map<number, PendingRequest>();
   private readonly notificationHandlers = new Set<NotificationHandler>();
   private readonly serverRequestHandlers = new Set<ServerRequestHandler>();
+  private readonly failureHandlers = new Set<FailureHandler>();
   private readonly stderr: string[] = [];
   private nextId = 1;
   private closed = false;
+  private failure: Error | undefined;
 
   private constructor(
     command: string,
@@ -139,11 +142,13 @@ class CodexConnection {
     });
 
     const fail = (error: Error) => {
-      if (this.closed) return;
+      if (this.closed || this.failure) return;
       const detail = this.stderr.join("").trim();
       const failure = detail ? new Error(`${error.message}\n${detail}`) : error;
+      this.failure = failure;
       this.pending.forEach(({ reject }) => reject(failure));
       this.pending.clear();
+      this.failureHandlers.forEach((handler) => handler(failure));
     };
     this.process.on("error", (error) => fail(error));
     this.process.on("exit", (code, signal) => {
@@ -188,6 +193,9 @@ class CodexConnection {
     if (this.closed) {
       return Promise.reject(new Error("Codex app-server is closed."));
     }
+    if (this.failure) {
+      return Promise.reject(this.failure);
+    }
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
@@ -219,6 +227,15 @@ class CodexConnection {
     return () => this.serverRequestHandlers.delete(handler);
   }
 
+  onFailure(handler: FailureHandler): () => void {
+    if (this.failure) {
+      handler(this.failure);
+      return () => {};
+    }
+    this.failureHandlers.add(handler);
+    return () => this.failureHandlers.delete(handler);
+  }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;
@@ -227,10 +244,13 @@ class CodexConnection {
     const error = new Error("Codex app-server connection closed.");
     this.pending.forEach(({ reject }) => reject(error));
     this.pending.clear();
+    this.failureHandlers.clear();
   }
 
   private write(message: unknown): void {
-    this.process.stdin.write(`${JSON.stringify(message)}\n`);
+    if (!this.closed && !this.failure) {
+      this.process.stdin.write(`${JSON.stringify(message)}\n`);
+    }
   }
 }
 
@@ -250,6 +270,11 @@ interface TurnCompletedParams {
     } | null;
   };
 }
+
+type TurnOutcome =
+  | { type: "completed"; params: TurnCompletedParams }
+  | { type: "failed"; error: Error }
+  | { type: "aborted" };
 
 interface AccountReadResult {
   account?:
@@ -318,9 +343,8 @@ export class CodexAppServerClient implements ModelClient {
     const toolCalls: ToolCall[] = [];
     let activeThreadId: string | undefined;
     let activeTurnId: string | undefined;
-    let fatalError: Error | undefined;
-    let settleTurn!: (params: TurnCompletedParams) => void;
-    const turnCompleted = new Promise<TurnCompletedParams>((resolve) => {
+    let settleTurn!: (outcome: TurnOutcome) => void;
+    const turnOutcome = new Promise<TurnOutcome>((resolve) => {
       settleTurn = resolve;
     });
 
@@ -334,12 +358,21 @@ export class CodexAppServerClient implements ModelClient {
         activeTurnId = turn?.id;
       }
       if (message.method === "turn/completed") {
-        settleTurn(message.params as TurnCompletedParams);
+        settleTurn({
+          type: "completed",
+          params: message.params as TurnCompletedParams,
+        });
       }
       if (message.method === "error" && message.params?.willRetry === false) {
         const error = message.params.error as { message?: string } | undefined;
-        fatalError = new Error(error?.message ?? "Codex model request failed.");
+        settleTurn({
+          type: "failed",
+          error: new Error(error?.message ?? "Codex model request failed."),
+        });
       }
+    });
+    const removeFailure = connection.onFailure((error) => {
+      settleTurn({ type: "failed", error });
     });
 
     const removeServerRequest = connection.onServerRequest((message) => {
@@ -403,7 +436,7 @@ export class CodexAppServerClient implements ModelClient {
           });
         })
         .catch((error: unknown) => {
-          fatalError =
+          const failure =
             error instanceof Error ? error : new Error("Task Tree tool failed.");
           connection.respond(message.id!, {
             contentItems: [
@@ -411,7 +444,7 @@ export class CodexAppServerClient implements ModelClient {
                 type: "inputText",
                 text: JSON.stringify({
                   ok: false,
-                  error: fatalError.message,
+                  error: failure.message,
                 }),
               },
             ],
@@ -421,17 +454,19 @@ export class CodexAppServerClient implements ModelClient {
             void connection.request("turn/interrupt", {
               threadId: activeThreadId,
               turnId: activeTurnId,
-            });
+            }).catch(() => undefined);
           }
+          settleTurn({ type: "failed", error: failure });
         });
     });
 
     const abort = () => {
+      settleTurn({ type: "aborted" });
       if (activeThreadId && activeTurnId) {
         void connection.request("turn/interrupt", {
           threadId: activeThreadId,
           turnId: activeTurnId,
-        });
+        }).catch(() => undefined);
       }
       connection.close();
     };
@@ -459,7 +494,8 @@ export class CodexAppServerClient implements ModelClient {
         throw new Error("Codex app-server did not return a thread ID.");
       }
 
-      await connection.request("turn/start", {
+      if (signal.aborted) throw abortError();
+      const startedTurn = (await connection.request("turn/start", {
         threadId: activeThreadId,
         input: [
           {
@@ -473,22 +509,27 @@ export class CodexAppServerClient implements ModelClient {
           request.format && typeof request.format === "object"
             ? request.format
             : undefined,
-      });
+      })) as { turn?: { id?: string } };
+      activeTurnId ??= startedTurn.turn?.id;
 
-      const completed = await turnCompleted;
-      if (signal.aborted) throw abortError();
-      if (fatalError) throw fatalError;
-      if (completed.turn?.status !== "completed") {
+      const outcome = await turnOutcome;
+      if (signal.aborted || outcome.type === "aborted") throw abortError();
+      if (outcome.type === "failed") throw outcome.error;
+      if (outcome.params.turn?.status !== "completed") {
         throw new Error(
-          completed.turn?.error?.message ??
-            `Codex turn ended with status ${completed.turn?.status ?? "unknown"}.`,
+          outcome.params.turn?.error?.message ??
+            `Codex turn ended with status ${outcome.params.turn?.status ?? "unknown"}.`,
         );
       }
       return { content: content.join(""), toolCalls };
+    } catch (error) {
+      if (signal.aborted) throw abortError();
+      throw error;
     } finally {
       signal.removeEventListener("abort", abort);
       removeNotification();
       removeServerRequest();
+      removeFailure();
       connection.close();
     }
   }
