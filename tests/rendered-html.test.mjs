@@ -32,6 +32,7 @@ test("server-renders the Task Tree application shell", async () => {
   assert.match(html, /Task Tree/);
   assert.match(html, /local planning workspace/);
   assert.match(html, /Ordered decomposition/);
+  assert.match(html, /og\.png/);
   assert.doesNotMatch(html, /Codex/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });

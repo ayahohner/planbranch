@@ -82,7 +82,7 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
 
   return (
     <article
-      className={`task-node task-node-${kind} ${isRoot ? "task-node-root" : ""}`}
+      className={`task-node task-node-${kind} ${isRoot ? "task-node-root" : ""} ${runDisabled ? "task-node-run-locked" : ""}`}
       data-task-id={task.id}
       data-run-state={visualState}
     >

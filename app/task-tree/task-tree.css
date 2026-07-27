@@ -235,6 +235,15 @@
   filter: saturate(0.7);
 }
 
+.task-node-run-locked .inline-field-display,
+.task-node-run-locked .inline-field-input,
+.task-node-run-locked .editable-list,
+.task-node-run-locked .define-operator,
+.task-node-run-locked .operator-value,
+.task-node-run-locked .operator-form {
+  pointer-events: none;
+}
+
 .task-node[data-run-state="removing"]::after {
   position: absolute;
   z-index: 4;
