@@ -1,6 +1,5 @@
 "use client";
 
-import dagre from "@dagrejs/dagre";
 import {
   Background,
   BackgroundVariant,
@@ -15,6 +14,7 @@ import {
 } from "@xyflow/react";
 import { useEffect, useMemo } from "react";
 import type { RunAction, Task, TaskTree } from "../../packages/domain/src";
+import { layoutOrderedTree, type OrderedLayoutNode } from "./ordered-layout";
 import type { GhostBranch } from "./store";
 import { TaskNode, type TaskFlowNode } from "./task-node";
 
@@ -44,18 +44,10 @@ function buildFlow(
   const ghostParentIds = new Set(
     ghostBranches.map((branch) => branch.parentId),
   );
-  const graph = new dagre.graphlib.Graph();
-  graph.setDefaultEdgeLabel(() => ({}));
-  graph.setGraph({
-    rankdir: "TB",
-    ranksep: 100,
-    nodesep: 56,
-    marginx: 48,
-    marginy: 48,
-  });
 
   const nodes: TaskFlowNode[] = [];
   const edges: Edge[] = [];
+  const layoutNodes: OrderedLayoutNode[] = [];
   const structure: string[] = [];
 
   const visit = (
@@ -66,7 +58,13 @@ function buildFlow(
     removing = false,
   ) => {
     const height = estimateHeight(task, isRoot);
-    graph.setNode(task.id, { width: NODE_WIDTH, height });
+    layoutNodes.push({
+      id: task.id,
+      parentId,
+      order,
+      width: NODE_WIDTH,
+      height,
+    });
     nodes.push({
       id: task.id,
       type: "task",
@@ -93,7 +91,6 @@ function buildFlow(
     structure.push(`${parentId ?? "root"}:${task.id}`);
 
     if (parentId) {
-      graph.setEdge(parentId, task.id);
       edges.push({
         id: `${parentId}-${task.id}`,
         source: parentId,
@@ -124,15 +121,11 @@ function buildFlow(
   ghostBranches.forEach((branch) =>
     visit(branch.task, branch.parentId, branch.order, false, true),
   );
-  dagre.layout(graph);
+  const positions = layoutOrderedTree(layoutNodes);
   const positioned = nodes.map((node) => {
-    const position = graph.node(node.id);
     return {
       ...node,
-      position: {
-        x: position.x - NODE_WIDTH / 2,
-        y: position.y - position.height / 2,
-      },
+      position: positions[node.id],
     };
   });
 
