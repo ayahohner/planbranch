@@ -240,11 +240,97 @@ function unresolvedWarnings(
   return issues;
 }
 
+function decompositionCompletenessIssues(
+  context: AttemptContext,
+): ValidationIssue[] {
+  if (context.action !== "decompose" && context.action !== "optimize") {
+    return [];
+  }
+
+  const target = findTaskOrFail(context.draft, context.targetTaskId);
+  const issues: ValidationIssue[] = [];
+  const visit = (task: Task) => {
+    const isTarget = task.id === context.targetTaskId;
+    const requiresOwnFields = !isTarget || task.children.length === 0;
+
+    if (requiresOwnFields && !task.description.trim()) {
+      issues.push({
+        code: "MISSING_TASK_DESCRIPTION",
+        message: `${task.title} needs a description before the Run can finish.`,
+        path: task.id,
+        severity: "error",
+      });
+    }
+    if (requiresOwnFields && task.inputs.length === 0) {
+      issues.push({
+        code: "MISSING_TASK_INPUT",
+        message: `${task.title} needs at least one input Artifact Label.`,
+        path: task.id,
+        severity: "error",
+      });
+    }
+    if (requiresOwnFields && task.outputs.length === 0) {
+      issues.push({
+        code: "MISSING_TASK_OUTPUT",
+        message: `${task.title} needs at least one output Artifact Label.`,
+        path: task.id,
+        severity: "error",
+      });
+    }
+    if (task.children.length === 0 && !task.operator) {
+      issues.push({
+        code: "MISSING_OPERATOR",
+        message: `${task.title} must have a direct Operator or be decomposed further.`,
+        path: task.id,
+        severity: "error",
+      });
+    }
+    task.children.forEach(visit);
+  };
+  visit(target);
+  return issues;
+}
+
 function parseToolArguments<T>(
   schema: z.ZodType<T>,
   call: ToolCall,
 ): T {
-  return schema.parse(call.function.arguments);
+  const result = schema.safeParse(call.function.arguments);
+  if (result.success) return result.data;
+
+  const unsupported = result.error.issues.flatMap((issue) =>
+    issue.code === "unrecognized_keys" ? issue.keys : [],
+  );
+  if (unsupported.length > 0) {
+    const allowed =
+      call.function.name === "add_subtask"
+        ? "parent_id, after_sibling_id, and title"
+        : call.function.name === "revise_task"
+          ? "task_id and exactly one of title, description, inputs, outputs, or goals"
+          : "the fields declared by the tool";
+    throw new AttemptFailure(
+      `${call.function.name} accepts only ${allowed}. Unsupported: ${unsupported.join(", ")}.`,
+    );
+  }
+
+  if (
+    result.error.issues.some((issue) =>
+      issue.message.includes("Artifact Labels"),
+    )
+  ) {
+    throw new AttemptFailure(
+      'Artifact Labels must capitalize every word, for example "Running Water" and "Clean Body".',
+    );
+  }
+
+  throw new AttemptFailure(
+    result.error.issues
+      .map((issue) => {
+        const path = issue.path.length > 0 ? ` (${issue.path.join(".")})` : "";
+        return `${issue.message}${path}`;
+      })
+      .join(" "),
+  );
 }
 
 function parseStructuredJson(content: string): unknown {
@@ -695,6 +781,18 @@ export class RunManager {
       throw new AttemptFailure(
         "Structural validation failed.",
         structuralIssues,
+      );
+    }
+
+    const completenessIssues = decompositionCompletenessIssues(context);
+    if (completenessIssues.length > 0) {
+      context.run.emit("validation.failed", {
+        phase: "completeness",
+        issues: completenessIssues,
+      });
+      throw new AttemptFailure(
+        "Generated Tasks are incomplete.",
+        completenessIssues,
       );
     }
 

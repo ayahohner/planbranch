@@ -112,7 +112,13 @@ const successfulCollapseTools: ModelMessage = {
       task_id: parentId,
       description:
         "Create the landing page in one bounded implementation pass.",
+    }),
+    toolCall("revise_task", {
+      task_id: parentId,
       inputs: ["Startup Brief"],
+    }),
+    toolCall("revise_task", {
+      task_id: parentId,
       outputs: ["Landing Page"],
     }),
     toolCall("declare_operator", {
@@ -258,6 +264,96 @@ describe("RunManager", () => {
     expect(parent?.operator).toEqual({
       executor: "llm",
       name: "create-landing-page",
+    });
+  });
+
+  it("retries rather than committing incomplete generated subtasks", async () => {
+    const incomplete: ModelMessage = {
+      content: "",
+      toolCalls: [
+        toolCall("add_subtask", {
+          parent_id: rootId,
+          title: "Draft Page",
+        }),
+        toolCall("finish_run"),
+      ],
+    };
+    const manager = new RunManager(
+      new FakeModel([incomplete, incomplete, incomplete]),
+      config,
+      () => runId,
+    );
+    const started = manager.start({
+      action: "decompose",
+      tree: createEmptyTree(rootId),
+      targetTaskId: rootId,
+    });
+    const finished = await manager.waitForRun(started.id);
+
+    expect(finished.state).toBe("failed");
+    expect(
+      finished.events.filter((event) => event.type === "attempt.started"),
+    ).toHaveLength(3);
+    expect(
+      JSON.stringify(
+        finished.events
+          .filter((event) => event.type === "attempt.failed")
+          .map((event) => event.payload),
+      ),
+    ).toContain("MISSING_TASK_DESCRIPTION");
+    expect(JSON.stringify(finished.events)).toContain("MISSING_OPERATOR");
+  });
+
+  it("commits a complete subtask built through field-by-field edits", async () => {
+    const complete: ModelMessage = {
+      content: "",
+      toolCalls: [
+        toolCall("add_subtask", {
+          parent_id: rootId,
+          title: "Draft Page",
+        }),
+        toolCall("revise_task", {
+          task_id: runId,
+          description: "Draft the page from the supplied brief.",
+        }),
+        toolCall("revise_task", {
+          task_id: runId,
+          inputs: ["Page Brief"],
+        }),
+        toolCall("revise_task", {
+          task_id: runId,
+          outputs: ["Page Draft"],
+        }),
+        toolCall("declare_operator", {
+          task_id: runId,
+          executor: "llm",
+          operator: "draft-page",
+        }),
+        toolCall("finish_run"),
+      ],
+    };
+    const model = new FakeModel([complete], [validAudit]);
+    const manager = new RunManager(model, config, () => runId);
+    const started = manager.start({
+      action: "decompose",
+      tree: createEmptyTree(rootId),
+      targetTaskId: rootId,
+    });
+    const finished = await manager.waitForRun(started.id);
+
+    expect(finished.state).toBe("completed");
+    const completion = finished.events.find(
+      (event) => event.type === "run.completed",
+    );
+    const result = (
+      completion?.payload as { tree: ReturnType<typeof createEmptyTree> }
+    ).tree;
+    expect(result.root.children[0]).toMatchObject({
+      title: "Draft Page",
+      description: "Draft the page from the supplied brief.",
+      inputs: ["Page Brief"],
+      outputs: ["Page Draft"],
+      operator: { executor: "llm", name: "draft-page" },
     });
   });
 

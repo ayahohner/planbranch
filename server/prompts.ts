@@ -38,9 +38,19 @@ Inputs must be 0–12 distinct Title Case Artifact Labels for source information
 Preserve useful existing entries, remove weak placeholders and synonyms, and do not invent specific facts absent from the brief.
 Do not revise Title, Description, Outputs, or any other Task field. Do not change the tree structure or Operator.`;
     case "decompose":
-      return `Decompose Task ${targetId}. You may revise it and create an ordered subtree below it. Classify directly actionable leaves by declaring Operators.`;
+      return `Decompose Task ${targetId} into a complete, strictly ordered subtree.
+Create siblings in chronological execution order. Omit after_sibling_id to append each new sibling, or use an accepted sibling ID when inserting deliberately.
+For every new Task:
+1. Call add_subtask with only parent_id, after_sibling_id when needed, and title.
+2. Using its returned task_id, call revise_task separately for description, inputs, and outputs. Do not combine fields.
+3. If it is a leaf, call declare_operator. Every leaf must be directly actionable and Primitive before finish_run.
+Descriptions must state purpose and boundaries. Every new Task must have at least one input and output Artifact Label.
+Inputs belong on the Task that consumes them and outputs belong on the Task that produces them. The target Task contains only the overall subtree boundary artifacts; do not aggregate descendant artifact flow onto it.
+Use identical Artifact Labels where an output flows into a later Task input. Capitalize every word in an Artifact Label, such as "Running Water" and "Clean Body".`;
     case "optimize":
-      return `Optimize Task ${targetId} and its descendants. Preserve its overall intent, improve ordering and decomposition quality, and do not mutate anything outside this subtree.`;
+      return `Optimize Task ${targetId} and its descendants. Preserve its overall intent, improve chronological ordering and decomposition quality, and do not mutate anything outside this subtree.
+Work one semantic field per revise_task call. Every descendant must finish with a non-empty description, at least one input and output Artifact Label, and every leaf must have a direct Operator.
+Inputs belong on the Task that consumes them and outputs on the Task that produces them. Reuse an identical Artifact Label across producer and consumer Tasks instead of aggregating descendant artifacts onto the optimization root.`;
     case "collapse":
       return `Collapse Task ${targetId}. Its descendants are staged for removal. Consolidate useful descendant detail into the surviving Task, then declare a direct Operator if defensible. Otherwise leave it Unresolved.`;
   }
@@ -98,6 +108,11 @@ export function buildSemanticAuditPrompt(
 - frozen Tasks outside the target subtree did not change;
 - for Collapse, the surviving Task preserves useful intent and external siblings remain unchanged.`;
 
+  const unresolvedPolicy =
+    action === "decompose" || action === "optimize"
+      ? "Every leaf must be Primitive. Treat an Unresolved leaf as an error."
+      : "Unresolved Tasks are allowed and should produce warnings, not errors.";
+
   return `Audit this ${action} result for Task ${targetId}.
 
 Return JSON only:
@@ -115,7 +130,7 @@ Return JSON only:
 Check:
 ${checks}
 
-Unresolved Tasks are allowed and should produce warnings, not errors.
+${unresolvedPolicy}
 
 Before:
 ${JSON.stringify(original, null, 2)}

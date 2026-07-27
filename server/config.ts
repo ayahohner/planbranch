@@ -31,7 +31,7 @@ export function loadServerConfig(
       environment.MODEL_REASONING_EFFORT ?? "xhigh",
     modelAuthMode: environment.MODEL_AUTH_MODE ?? "chatgpt",
     maxAttempts: positiveInteger(environment.RUN_MAX_ATTEMPTS, 3),
-    maxToolCalls: positiveInteger(environment.RUN_MAX_TOOL_CALLS, 80),
+    maxToolCalls: positiveInteger(environment.RUN_MAX_TOOL_CALLS, 200),
     maxRejectedTools: positiveInteger(environment.RUN_MAX_REJECTED_TOOLS, 3),
   };
 }

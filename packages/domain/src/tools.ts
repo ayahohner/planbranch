@@ -13,16 +13,16 @@ export const reviseTaskInputSchema = z
   .object({
     task_id: z.uuid(),
     title: z.string().trim().min(1).max(200).optional(),
-    description: z.string().trim().max(10_000).optional(),
+    description: z.string().trim().min(1).max(10_000).optional(),
     inputs: z.array(artifactLabelSchema).max(50).optional(),
     outputs: z.array(artifactLabelSchema).max(50).optional(),
     goals: z.array(z.string().trim().min(1).max(500)).min(1).max(50).optional(),
   })
   .strict()
   .refine(({ title, description, inputs, outputs, goals }) =>
-    [title, description, inputs, outputs, goals].some(
+    [title, description, inputs, outputs, goals].filter(
       (value) => value !== undefined,
-    ), "At least one Task field must be supplied.");
+    ).length === 1, "revise_task accepts exactly one semantic field per call.");
 
 export const declareOperatorInputSchema = z
   .object({
@@ -71,7 +71,7 @@ export const toolDefinitions: Record<ToolName, LlmToolDefinition> = {
     function: {
       name: "add_subtask",
       description:
-        "Create and immediately link one ordered Unresolved subtask under a parent Task.",
+        "Create and immediately link one ordered Unresolved subtask. This tool accepts only parent_id, after_sibling_id, and title. After creation, use the returned task_id with separate revise_task calls for description, inputs, and outputs, then declare_operator for a direct leaf.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -93,15 +93,21 @@ export const toolDefinitions: Record<ToolName, LlmToolDefinition> = {
     function: {
       name: "revise_task",
       description:
-        "Replace one or more semantic fields on an existing Task. Goals are Root-only.",
+        'Replace exactly one semantic field on an existing Task so the edit can stream visibly. Artifact Labels must capitalize every word, for example "Running Water" or "Clean Body". Goals are Root-only.',
       parameters: {
         type: "object",
         additionalProperties: false,
         required: ["task_id"],
+        minProperties: 2,
+        maxProperties: 2,
         properties: {
           task_id: { type: "string", format: "uuid" },
           title: { type: "string", minLength: 1, maxLength: 200 },
-          description: { type: "string", maxLength: 10_000 },
+          description: {
+            type: "string",
+            minLength: 1,
+            maxLength: 10_000,
+          },
           inputs: {
             type: "array",
             items: { type: "string" },
