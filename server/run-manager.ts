@@ -133,6 +133,7 @@ interface AttemptContext {
   rejectedTools: number;
   finished: boolean;
   populatedFields: Set<"goals" | "inputs">;
+  toolResultsByCallId: Map<string, Record<string, unknown>>;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -501,6 +502,7 @@ export class RunManager {
       rejectedTools: 0,
       finished: false,
       populatedFields: new Set(),
+      toolResultsByCallId: new Map(),
     };
 
     if (
@@ -546,6 +548,10 @@ export class RunManager {
       },
       run.abortController.signal,
       (call) => {
+        if (call.id) {
+          const cached = context.toolResultsByCallId.get(call.id);
+          if (cached) return cached;
+        }
         toolCallCount += 1;
         if (toolCallCount > this.config.maxToolCalls) {
           throw new AttemptFailure(
@@ -572,6 +578,7 @@ export class RunManager {
             );
           }
         }
+        if (call.id) context.toolResultsByCallId.set(call.id, result);
         return result;
       },
     );
@@ -696,6 +703,22 @@ export class RunManager {
           context.populatedFields.add(field);
         }
         const patch = { title, description, inputs, outputs, goals };
+        const currentTask = findTaskOrFail(context.draft, taskId);
+        const suppliedField = Object.entries({
+          title,
+          description,
+          inputs,
+          outputs,
+          goals,
+        }).find(([, value]) => value !== undefined);
+        if (suppliedField) {
+          const [field, value] = suppliedField;
+          const currentValue =
+            field === "goals" ? context.draft.root.goals : currentTask[field as keyof Task];
+          if (JSON.stringify(currentValue) === JSON.stringify(value)) {
+            return { ok: true, unchanged: true };
+          }
+        }
         context.draft = reviseTask(context.draft, taskId, patch);
         context.run.emit("task.revised", { taskId, patch });
         return { ok: true };
@@ -703,6 +726,13 @@ export class RunManager {
       case "declare_operator": {
         const input = parseToolArguments(declareOperatorInputSchema, call);
         this.assertWritable(context, input.task_id);
+        const task = findTaskOrFail(context.draft, input.task_id);
+        if (
+          task.operator?.executor === input.executor &&
+          task.operator.name === input.operator
+        ) {
+          return { ok: true, unchanged: true };
+        }
         context.draft = declareOperator(context.draft, input.task_id, {
           executor: input.executor,
           name: input.operator,

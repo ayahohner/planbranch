@@ -329,6 +329,11 @@ describe("RunManager", () => {
           executor: "llm",
           operator: "draft-page",
         }),
+        toolCall("declare_operator", {
+          task_id: runId,
+          executor: "llm",
+          operator: "draft-page",
+        }),
         toolCall("finish_run"),
       ],
     };
@@ -355,6 +360,9 @@ describe("RunManager", () => {
       outputs: ["Page Draft"],
       operator: { executor: "llm", name: "draft-page" },
     });
+    expect(
+      finished.events.filter((event) => event.type === "operator.declared"),
+    ).toHaveLength(1);
   });
 
   it("retries from the original snapshot after a generation failure", async () => {
