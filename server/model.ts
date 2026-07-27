@@ -33,6 +33,7 @@ export interface ModelChatRequest {
 export interface ModelHealth {
   connected: boolean;
   authenticated: boolean;
+  authenticationMode?: "chatgpt" | "api-key" | "managed";
   runtime: string;
   provider: string;
   authentication?: string;
@@ -514,6 +515,14 @@ export class CodexAppServerClient implements ModelClient {
       const account = accountResult as AccountReadResult;
       const models = modelResult as ModelListResult;
       const authenticated = Boolean(account.account);
+      const authenticationMode =
+        account.account?.type === "chatgpt"
+          ? "chatgpt"
+          : account.account?.type === "apiKey"
+            ? "api-key"
+            : account.account?.type === "amazonBedrock"
+              ? "managed"
+              : undefined;
       const authentication =
         account.account?.type === "chatgpt"
           ? titleCasePlan(account.account.planType)
@@ -526,6 +535,7 @@ export class CodexAppServerClient implements ModelClient {
       return {
         connected: true,
         authenticated,
+        authenticationMode,
         runtime: "Codex CLI",
         provider: "OpenAI",
         authentication,

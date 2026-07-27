@@ -844,7 +844,7 @@ input.task-title {
   background: #f5f3fc;
 }
 
-.health-missing,
+.health-unavailable,
 .health-offline {
   color: #9a5042;
   border-color: #ebc8c0;
@@ -876,6 +876,13 @@ input.task-title {
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.health-runtime {
+  color: var(--text-muted);
+  display: block;
+  font-size: 0.72rem;
+  line-height: 1.35;
 }
 
 .run-progress-card {

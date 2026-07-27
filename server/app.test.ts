@@ -16,6 +16,7 @@ const config: ServerConfig = {
   modelProvider: "OpenAI",
   modelName: "gpt-5.3-codex-spark",
   modelReasoningEffort: "xhigh",
+  modelAuthMode: "chatgpt",
   maxAttempts: 3,
   maxToolCalls: 10,
   maxRejectedTools: 3,
@@ -34,6 +35,7 @@ class IdleModel implements ModelClient {
     return {
       connected: true,
       authenticated: true,
+      authenticationMode: "chatgpt",
       runtime: "Fake",
       provider: "Test",
       version: "test",
@@ -62,6 +64,8 @@ describe("model service HTTP policy", () => {
       provider: {
         name: "Test",
         authenticated: true,
+        authenticationMode: "chatgpt",
+        requiredAuthenticationMode: "chatgpt",
       },
       model: {
         name: "gpt-5.3-codex-spark",

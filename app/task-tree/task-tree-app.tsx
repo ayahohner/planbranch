@@ -154,9 +154,10 @@ export function TaskTreeApp() {
             activeRun
               ? `Attempt ${Math.max(activeRun.attempt, 1)} of ${activeRun.maxAttempts}`
               : modelHealth.status === "checking"
-                ? "Checking Ollama…"
+                ? `Checking ${modelHealth.runtime}…`
                 : modelHealth.name
           }
+          modelRuntimeLabel={`${modelHealth.provider} · ${modelHealth.runtime}`}
           modelReady={modelHealth.status === "ready"}
           onExport={exportJson}
           onImport={(file) => void readImport(file)}

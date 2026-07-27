@@ -51,6 +51,7 @@ export function Toolbar({
   canUndo,
   canRedo,
   modelLabel,
+  modelRuntimeLabel,
   modelReady,
   onNew,
   onImport,
@@ -63,6 +64,7 @@ export function Toolbar({
   canUndo: boolean;
   canRedo: boolean;
   modelLabel: string;
+  modelRuntimeLabel: string;
   modelReady: boolean;
   onNew: () => void;
   onImport: (file: File) => void;
@@ -138,7 +140,7 @@ export function Toolbar({
           className={`model-status-dot ${modelReady ? "is-ready" : ""}`}
         />
         <span>
-          <small>Local model</small>
+          <small>{modelRuntimeLabel}</small>
           <strong>{modelLabel}</strong>
         </span>
         {modelReady ? <Activity size={15} /> : <RotateCcw size={15} />}

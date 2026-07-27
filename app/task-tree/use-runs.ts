@@ -13,14 +13,25 @@ const API_BASE =
 
 interface HealthResponse {
   ok: boolean;
-  ollama: {
+  runtime: {
+    id: string;
+    name: string;
     connected: boolean;
     version?: string;
     error?: string;
   };
+  provider: {
+    name: string;
+    authenticated: boolean;
+    authentication?: string;
+    authenticationMode?: string;
+    requiredAuthenticationMode?: string;
+    error?: string;
+  };
   model: {
     name: string;
-    installed: boolean;
+    available: boolean;
+    reasoningEffort?: string;
   };
 }
 
@@ -37,7 +48,13 @@ export function useRuns() {
   const sourceRef = useRef<EventSource | null>(null);
 
   const refreshHealth = useCallback(async () => {
-    setModelHealth({ status: "checking", name: modelHealth.name });
+    setModelHealth({
+      status: "checking",
+      name: modelHealth.name,
+      runtime: modelHealth.runtime,
+      provider: modelHealth.provider,
+      reasoningEffort: modelHealth.reasoningEffort,
+    });
     try {
       const response = await fetch(`${API_BASE}/health`);
       if (!response.ok) throw new Error(`Health check returned ${response.status}.`);
@@ -45,28 +62,44 @@ export function useRuns() {
       setModelHealth({
         status: health.ok
           ? "ready"
-          : health.ollama.connected
-            ? "missing"
+          : health.runtime.connected
+            ? "unavailable"
             : "offline",
         name: health.model.name,
-        version: health.ollama.version,
+        runtime: health.runtime.name,
+        provider: health.provider.name,
+        authentication: health.provider.authentication,
+        reasoningEffort: health.model.reasoningEffort,
+        version: health.runtime.version,
         error:
-          health.ollama.error ??
-          (!health.model.installed
-            ? `Run: ollama pull ${health.model.name}`
-            : undefined),
+          health.runtime.error ??
+          health.provider.error ??
+          (!health.provider.authenticated
+            ? `Sign in to ${health.runtime.name}.`
+            : !health.model.available
+              ? `${health.model.name} is unavailable for this account or provider.`
+              : undefined),
       });
     } catch (error) {
       setModelHealth({
         status: "offline",
         name: modelHealth.name,
+        runtime: modelHealth.runtime,
+        provider: modelHealth.provider,
+        reasoningEffort: modelHealth.reasoningEffort,
         error:
           error instanceof Error
             ? error.message
-            : "The local model service is unavailable.",
+            : "The configured model runtime is unavailable.",
       });
     }
-  }, [modelHealth.name, setModelHealth]);
+  }, [
+    modelHealth.name,
+    modelHealth.provider,
+    modelHealth.reasoningEffort,
+    modelHealth.runtime,
+    setModelHealth,
+  ]);
 
   useEffect(() => {
     void refreshHealth();
@@ -89,9 +122,8 @@ export function useRuns() {
         setNotice({
           kind: "error",
           message:
-            modelHealth.status === "missing"
-              ? `Install the configured model first: ollama pull ${modelHealth.name}`
-              : "The local Ollama service is not ready.",
+            modelHealth.error ??
+            `${modelHealth.name} is not ready through ${modelHealth.runtime}.`,
         });
         return;
       }

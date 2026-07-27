@@ -37,8 +37,12 @@ export async function buildApp({
   app.get("/api/health", async () => {
     const health = await model.health();
     const available = health.availableModels.includes(config.modelName);
+    const authReady =
+      health.authenticated &&
+      (config.modelAuthMode === "any" ||
+        health.authenticationMode === config.modelAuthMode);
     return {
-      ok: health.connected && health.authenticated && available,
+      ok: health.connected && authReady && available,
       runtime: {
         id: config.modelRuntime,
         name: health.runtime,
@@ -48,8 +52,14 @@ export async function buildApp({
       },
       provider: {
         name: health.provider || config.modelProvider,
-        authenticated: health.authenticated,
+        authenticated: authReady,
         authentication: health.authentication,
+        authenticationMode: health.authenticationMode,
+        requiredAuthenticationMode: config.modelAuthMode,
+        error:
+          health.authenticated && !authReady
+            ? `This runtime requires ${config.modelAuthMode} authentication; the active login uses ${health.authenticationMode ?? "an unknown method"}.`
+            : undefined,
       },
       model: {
         name: config.modelName,

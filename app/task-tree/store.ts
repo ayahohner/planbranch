@@ -77,8 +77,12 @@ export interface RunSummary {
 }
 
 export interface ModelHealthState {
-  status: "checking" | "ready" | "missing" | "offline";
+  status: "checking" | "ready" | "unavailable" | "offline";
   name: string;
+  runtime: string;
+  provider: string;
+  authentication?: string;
+  reasoningEffort?: string;
   version?: string;
   error?: string;
 }
@@ -132,7 +136,13 @@ export const useEditorStore = create<EditorState>((set) => ({
   runSummary: null,
   runLogs: [],
   activityOpen: false,
-  modelHealth: { status: "checking", name: "gemma4:26b-mlx" },
+  modelHealth: {
+    status: "checking",
+    name: "gpt-5.3-codex-spark",
+    runtime: "Codex app-server",
+    provider: "OpenAI",
+    reasoningEffort: "xhigh",
+  },
 
   commitTree: (nextTree, label) =>
     set((state) => {

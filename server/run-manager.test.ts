@@ -28,6 +28,7 @@ const config: ServerConfig = {
   modelProvider: "OpenAI",
   modelName: "gpt-5.3-codex-spark",
   modelReasoningEffort: "xhigh",
+  modelAuthMode: "chatgpt",
   maxAttempts: 3,
   maxToolCalls: 10,
   maxRejectedTools: 3,
@@ -70,6 +71,7 @@ class FakeModel implements ModelClient {
     return {
       connected: true,
       authenticated: true,
+      authenticationMode: "chatgpt",
       runtime: "Fake",
       provider: "Test",
       version: "test",

@@ -1,9 +1,13 @@
 # Task Tree
 
-Task Tree is a local, single-user planning workspace that uses Gemma 4 through
-Ollama to decompose complex work into a strictly ordered Task Tree. Model edits
-materialize while a Run is in progress, validation and retries remain visible,
-and only successful Runs enter undo history.
+Task Tree is a local, single-user planning workspace that uses a configurable
+model runtime to decompose complex work into a strictly ordered Task Tree.
+Model edits materialize while a Run is in progress, validation and retries
+remain visible, and only successful Runs enter undo history.
+
+The default runtime is Codex app-server with `gpt-5.3-codex-spark` at `xhigh`
+reasoning effort. It reuses the local Codex CLI's ChatGPT login, so Runs use the
+Codex subscription rather than OpenAI API credits.
 
 The implementation follows [SPEC.md](./SPEC.md).
 
@@ -11,17 +15,18 @@ The implementation follows [SPEC.md](./SPEC.md).
 
 - macOS on Apple Silicon
 - Node.js 22.13 or newer
-- Ollama 0.32 or newer
-- The MLX build of Gemma 4 26B A4B
+- Codex CLI with access to `gpt-5.3-codex-spark`
+- A ChatGPT-authenticated Codex session
 
-Install the configured model once:
+Confirm the local authentication method:
 
 ```bash
-ollama pull gemma4:26b-mlx
+codex login status
 ```
 
-The model is approximately 18 GB. Task Tree checks for it but never downloads
-it automatically.
+If needed, run `codex login` and choose ChatGPT sign-in. The health check rejects
+API-key authentication by default so the app cannot silently consume API
+credits.
 
 ## Start
 
@@ -34,8 +39,10 @@ Open [http://localhost:3000](http://localhost:3000). The web client runs on
 port 3000 and the localhost-only model service runs on port 8787.
 
 Environment defaults are documented in `.env.example`. Copy them into a local
-`.env` only when overriding the default Ollama host, model, context, or Run
-budgets.
+`.env` only when overriding the runtime command, provider, model, reasoning
+effort, authentication mode, or Run budgets. The browser and server use
+provider-neutral status shapes so future local or cloud adapters do not require
+provider-specific UI changes.
 
 ## Product Workflows
 
@@ -58,13 +65,18 @@ Task Tree describes Primitive Operators but never executes them.
 
 ```text
 app/                 React and React Flow web client
-server/              Fastify, Ollama orchestration, SSE, retries
+server/              Fastify, model-runtime orchestration, SSE, retries
 packages/domain/     Shared schemas, invariants, tools, events
 ```
 
 The browser keeps committed state separate from the active Run overlay.
 Validated completion replaces the committed tree as one Immer patch entry.
 Failure or cancellation discards the overlay without changing history.
+
+Codex app-server receives the six domain operations as dynamic tools. Each
+accepted tool call updates the Run overlay and SSE stream immediately; rejected
+calls are returned to Codex for correction in the same turn. The model has a
+read-only sandbox and is explicitly restricted from unrelated tools.
 
 ## Verification
 

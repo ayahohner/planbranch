@@ -6,7 +6,7 @@ Date: 2026-07-27
 
 ## 1. Product Summary
 
-Build a local, single-user web application that turns a planning brief into a strictly ordered task tree with the help of a local Ollama model. Users can decompose any task, optimize a selected subtree, collapse excessive decomposition, edit every semantic field inline, undo or redo changes, and import or export the semantic tree as JSON.
+Build a local, single-user web application that turns a planning brief into a strictly ordered task tree with the help of a configurable model runtime. Users can decompose any task, optimize a selected subtree, collapse excessive decomposition, edit every semantic field inline, undo or redo changes, and import or export the semantic tree as JSON.
 
 The application must materialize model changes while the model is working. Tasks appear as they are added, existing fields are highlighted when revised, structural edits re-layout the graph, and rejected edits, retries, validation errors, cancellation, and rollback are visible in an activity panel.
 
@@ -20,7 +20,7 @@ The prototype describes Primitive Task Operators but never executes them.
 4. Distinguish Compound, Primitive, and Unresolved Tasks visually.
 5. Let the user correct the model through inline editing, scoped optimization, Collapse Task, undo, and redo.
 6. Preserve task semantics in a portable JSON representation that excludes presentation layout.
-7. Run locally and privately against an Ollama model optimized for the target Mac.
+7. Keep the application, persistence, and orchestration local while supporting explicitly identified local or hosted model providers.
 
 ## 3. Non-Goals
 
@@ -316,35 +316,37 @@ There is no general delete, Remove and Fold, or promote-children operation in th
 
 ## 7. Model and Runtime Configuration
 
-Target hardware:
+Default host:
 
-- Apple M2 Max
-- 32 GB unified memory
 - macOS
+- Node.js 22.13 or newer
+- Codex CLI signed in with ChatGPT
 
 Default model:
 
 ```text
-gemma4:26b-mlx
+gpt-5.3-codex-spark
 ```
 
 Default configuration:
 
 ```text
-OLLAMA_HOST=http://127.0.0.1:11434
-OLLAMA_MODEL=gemma4:26b-mlx
-OLLAMA_NUM_CTX=32768
+MODEL_RUNTIME=codex-app-server
+MODEL_COMMAND=codex
+MODEL_PROVIDER=OpenAI
+MODEL_NAME=gpt-5.3-codex-spark
+MODEL_REASONING_EFFORT=xhigh
+MODEL_AUTH_MODE=chatgpt
 ```
 
-The 18 GB MLX model is the Apple Silicon default. Keep the model and context configurable because practical speed depends on prompt size, quantization, and installed Ollama version. Do not attempt to allocate the advertised 256K context on this 32 GB machine by default.
+The runtime adapter, executable, provider label, model identifier, reasoning effort, and required authentication mode are independent configuration values. Product copy and health payloads use the generic terms Runtime, Provider, Model, Authentication, and Reasoning Effort. An adapter may represent an on-device runtime, a CLI-authenticated hosted model, or a future cloud proxy.
 
-At startup, the server checks Ollama availability and whether the configured model is installed. A missing model produces a clear local setup instruction:
+The default adapter controls Codex through its localhost app-server protocol and reuses the Codex CLI's cached ChatGPT login. It must not request or accept an OpenAI API key in the default configuration. At startup, the server verifies all of the following:
 
-```sh
-ollama pull gemma4:26b-mlx
-```
-
-The application must not silently download a multi-gigabyte model.
+- the configured runtime is reachable;
+- the runtime is authenticated through the required mode;
+- the configured model is available to the active account; and
+- the selected reasoning effort is reported in the UI.
 
 Model reasoning may be enabled for planning quality, but raw reasoning is neither sent to the browser nor stored. The visible activity feed is built from domain mutations, validation, and retry events.
 
@@ -488,7 +490,7 @@ For the prototype, semantic tree editing is locked while a Run is active. The us
 
 ### 10.2 Semantic Streaming
 
-Ollama tool calls are handled at semantic call granularity:
+Runtime tool calls are handled at semantic call granularity:
 
 - `add_subtask` immediately adds and links a visible Task.
 - `revise_task` streams field revisions to the relevant card.
@@ -600,7 +602,7 @@ Events are ordered by `sequence`. The server retains the event buffer for the li
 ```text
 apps/
   web/       React application
-  server/    Fastify API and Ollama orchestration
+  server/    Fastify API and model-runtime orchestration
 packages/
   domain/    Shared schemas, invariants, tools, events, and tree operations
 ```
@@ -628,12 +630,14 @@ React Flow renders and interacts with the tree; it is not the source of semantic
 - Node.js
 - TypeScript
 - Fastify
-- Official Ollama JavaScript client
+- Codex app-server client over local JSONL/stdio
 - Zod
 - Server-Sent Events
 - In-memory Run registry and event buffers
 
 The backend binds to `127.0.0.1` by default. In production mode it serves the built frontend from the same origin. In development, Vite proxies API requests to Fastify.
+
+The runtime boundary is provider-neutral. The initial `codex-app-server` adapter starts an ephemeral Codex thread for each Attempt, supplies only the action-specific domain tools as dynamic tools, executes the turn in a read-only sandbox, and answers dynamic tool requests from the same validated Run controller used by tests. Each accepted tool call emits an SSE event before the model continues. A future runtime adapter must implement the same health, tool-call, completion, cancellation, and error contract.
 
 ### 12.4 HTTP API
 
@@ -656,7 +660,7 @@ interface StartRunRequest {
 
 The response is `202 Accepted` with a `runId`. `run.completed` contains the validated final Task Tree. The frontend verifies that the completion corresponds to the locked base tree, commits it as one history entry, and removes the overlay.
 
-`DELETE /api/runs/:runId` cancels Ollama generation through an `AbortController`, emits `run.cancelled`, and discards server Run state after the event buffer retention period.
+`DELETE /api/runs/:runId` interrupts the active runtime turn through an `AbortController`, emits `run.cancelled`, and discards server Run state after the event buffer retention period.
 
 ## 13. User Interface
 
@@ -679,7 +683,7 @@ The response is `202 Accepted` with a `runId`. `run.completed` contains the vali
 - Undo
 - Redo
 - Fit View
-- Model/Ollama health/status indicator
+- Provider-neutral Runtime, Provider, Model, Authentication, and effort status
 
 ### Node Actions
 
@@ -711,9 +715,9 @@ Do not display raw chain-of-thought.
 - Treat imported strings as text; never render imported HTML.
 - Validate all imported files and model tool arguments.
 - Limit import size and Run budgets.
-- Do not silently download models.
+- Do not silently download models or change authentication/billing modes.
 - Do not execute described Operators.
-- Keep all tree data local unless the user explicitly exports a file.
+- Persist tree data only in the browser. A model Run sends the scoped prompt and tree context to the Provider identified in the status UI; no other remote persistence is added by the app.
 - Browser cancellation preflight permits `DELETE` only from localhost development origins.
 
 ## 15. Testing Strategy
@@ -739,7 +743,7 @@ Do not display raw chain-of-thought.
 
 ### Integration Tests
 
-Use a deterministic fake Ollama stream to test:
+Use a deterministic fake model runtime to test:
 
 - Progressive node creation
 - Field revisions and highlights
@@ -764,13 +768,12 @@ Use a deterministic fake Ollama stream to test:
 - Export, start a new tree, import, and recover identical semantics.
 - Observe and recover from a mocked three-attempt failure.
 
-### Hardware Verification
+### Runtime Verification
 
-On the target M2 Max:
-
-- Verify `gemma4:26b-mlx` loads without memory pressure at 32K context.
-- Record prompt-evaluation and generation tokens per second for representative Populate, Decompose, Optimize, and Collapse prompts.
-- Compare with an already-installed compatible quantized 26B model only if the MLX build is unstable or unexpectedly slower.
+- Verify Codex app-server reuses the ChatGPT-authenticated CLI session.
+- Verify the health endpoint rejects API-key login when `MODEL_AUTH_MODE=chatgpt`.
+- Verify `gpt-5.3-codex-spark` is available and accepts `xhigh` effort.
+- Record end-to-end latency for representative Populate, Decompose, Optimize, and Collapse Runs.
 
 ## 16. Acceptance Criteria
 
@@ -778,7 +781,7 @@ The prototype is complete when:
 
 1. A user can enter a Root Title, Description, Goals, Inputs, and Outputs.
 2. Generate Goals & Inputs streams aligned Root Goals and Inputs, changes no other semantic or structural data, and is undoable.
-3. Decompose creates and links visible Tasks incrementally through Ollama tool calls.
+3. Decompose creates and links visible Tasks incrementally through runtime tool calls.
 4. Every Task field is editable inline.
 5. Compound, Primitive, and Unresolved Tasks are visually distinct.
 6. Primitive Tasks show an Executor and Operator but cannot be executed.
@@ -790,14 +793,14 @@ The prototype is complete when:
 12. A failed Run leaves the committed tree and undo history unchanged.
 13. Undo and redo work for user edits and successful model Runs.
 14. JSON export/import round-trips all semantic data and no layout data.
-15. The app runs locally against `gemma4:26b-mlx` through Ollama.
+15. The app uses `gpt-5.3-codex-spark` through the ChatGPT-authenticated Codex app-server by default, without API credits.
 16. No described Operator is executed.
 
 ## 17. Recommended Implementation Order
 
 1. Create the shared domain package, schemas, invariants, tree operations, and JSON import/export.
 2. Build the React Flow editor, Root brief, inline editing, derived styling, Dagre layout, and undo/redo.
-3. Build the Fastify health endpoint, Ollama configuration, Run registry, and SSE transport.
+3. Build the Fastify health endpoint, runtime configuration, Run registry, and SSE transport.
 4. Implement the agent loop and the six domain tools.
 5. Add Populate Root Brief with field-by-field Goal and Input revisions.
 6. Add Decompose with live overlay events.

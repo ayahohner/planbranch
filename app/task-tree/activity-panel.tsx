@@ -64,7 +64,7 @@ export function ActivityPanel({
     <aside className="activity-panel" aria-label="Model activity">
       <header className="activity-header">
         <div>
-          <span className="activity-eyebrow">Local model activity</span>
+          <span className="activity-eyebrow">Model activity</span>
           <h2>{actionLabel}</h2>
         </div>
         <button aria-label="Close activity" onClick={onClose} type="button">
@@ -87,12 +87,21 @@ export function ActivityPanel({
             {model.status === "ready"
               ? "Ready"
               : model.status === "checking"
-                ? "Checking Ollama"
-                : model.status === "missing"
-                  ? "Model not installed"
-                  : "Service offline"}
+                ? `Checking ${model.runtime}`
+                : model.status === "unavailable"
+                  ? "Model unavailable"
+                  : "Runtime offline"}
           </small>
           <strong>{model.name}</strong>
+          <span className="health-runtime">
+            {model.provider} · {model.runtime}
+            {model.reasoningEffort
+              ? ` · ${model.reasoningEffort} effort`
+              : ""}
+          </span>
+          {model.authentication ? (
+            <span className="health-runtime">{model.authentication}</span>
+          ) : null}
           {model.error ? <code>{model.error}</code> : null}
         </div>
         <button
