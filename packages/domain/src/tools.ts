@@ -195,6 +195,10 @@ export const toolDefinitions: Record<ToolName, LlmToolDefinition> = {
 };
 
 export const toolsByAction = {
+  populate: [
+    toolDefinitions.revise_task,
+    toolDefinitions.finish_run,
+  ],
   decompose: [
     toolDefinitions.add_subtask,
     toolDefinitions.revise_task,

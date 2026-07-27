@@ -40,6 +40,8 @@ budgets.
 ## Product Workflows
 
 - Fill in the Root Brief's Title, Description, Goals, Inputs, and Outputs.
+- Use **Generate Goals & Inputs** to populate those Root fields from its Title
+  and Description.
 - Use **Decompose** on any Task to create an ordered subtree.
 - Use **Optimize Subtree** to revise only the selected Task and descendants.
 - Use **Collapse Task** to keep a Compound Task while removing excessive

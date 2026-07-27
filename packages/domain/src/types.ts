@@ -25,7 +25,7 @@ export interface TaskTree {
 }
 
 export type TaskKind = "compound" | "primitive" | "unresolved";
-export type RunAction = "decompose" | "optimize" | "collapse";
+export type RunAction = "populate" | "decompose" | "optimize" | "collapse";
 
 export type RevisableTaskFields = Pick<
   Task,

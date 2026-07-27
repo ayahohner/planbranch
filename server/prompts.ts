@@ -29,6 +29,14 @@ Rules:
 
 function actionInstruction(action: RunAction, targetId: string): string {
   switch (action) {
+    case "populate":
+      return `Populate the Root Brief for Task ${targetId}.
+Use its Title and Description as the authoritative brief.
+First call revise_task with task_id and goals only. Then call revise_task with task_id and inputs only.
+Goals must be 1–8 concise, testable end-state outcomes directly expressed or necessarily implied by the brief, never prerequisite projects or implementation steps.
+Inputs must be 0–12 distinct Title Case Artifact Labels for source information or materials available before execution, never intermediate deliverables.
+Preserve useful existing entries, remove weak placeholders and synonyms, and do not invent specific facts absent from the brief.
+Do not revise Title, Description, Outputs, or any other Task field. Do not change the tree structure or Operator.`;
     case "decompose":
       return `Decompose Task ${targetId}. You may revise it and create an ordered subtree below it. Classify directly actionable leaves by declaring Operators.`;
     case "optimize":
@@ -74,6 +82,22 @@ export function buildSemanticAuditPrompt(
   draft: TaskTree,
   targetId: string,
 ): string {
+  const checks =
+    action === "populate"
+      ? `- only Root Goals and Inputs changed;
+- Goals are concise outcomes aligned with the Root Title and Description;
+- Goals do not introduce prerequisite projects or implementation steps;
+- Inputs are distinct Title Case source Artifact Labels needed to pursue those Goals, not intermediate deliverables;
+- useful existing entries were preserved where still relevant;
+- no unsupported specific facts were invented.`
+      : `- alignment with Root Goals;
+- ordered children plausibly cover each Compound parent;
+- Primitive Tasks are directly actionable without another planning stage;
+- Artifact flow is coherent;
+- no unnecessary organizational abstractions were introduced;
+- frozen Tasks outside the target subtree did not change;
+- for Collapse, the surviving Task preserves useful intent and external siblings remain unchanged.`;
+
   return `Audit this ${action} result for Task ${targetId}.
 
 Return JSON only:
@@ -89,13 +113,7 @@ Return JSON only:
 }
 
 Check:
-- alignment with Root Goals;
-- ordered children plausibly cover each Compound parent;
-- Primitive Tasks are directly actionable without another planning stage;
-- Artifact flow is coherent;
-- no unnecessary organizational abstractions were introduced;
-- frozen Tasks outside the target subtree did not change;
-- for Collapse, the surviving Task preserves useful intent and external siblings remain unchanged.
+${checks}
 
 Unresolved Tasks are allowed and should produce warnings, not errors.
 

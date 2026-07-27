@@ -497,7 +497,9 @@ function addChangedField(
 }
 
 function runLabel(action: RunAction): string {
-  return action === "decompose"
+  return action === "populate"
+    ? "Generate Goals & Inputs"
+    : action === "decompose"
     ? "Decompose"
     : action === "optimize"
       ? "Optimize Subtree"

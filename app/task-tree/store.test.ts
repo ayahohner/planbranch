@@ -65,6 +65,53 @@ describe("editor history", () => {
     expect(useEditorStore.getState().tree.root.children).toEqual([]);
   });
 
+  it("materializes Root Goals and Inputs as separate highlighted revisions", () => {
+    const store = useEditorStore.getState();
+    const base = createEmptyTree(rootId);
+    const completed = createEmptyTree(rootId);
+    completed.root.goals = ["Generate qualified leads"];
+    completed.root.inputs = ["Startup Brief", "Target Audience"];
+
+    store.beginRun(runId, "populate", rootId);
+    store.applyRunEvent(
+      createRunEvent(runId, 1, 1, "attempt.started", {
+        tree: base,
+        attempt: 1,
+        maxAttempts: 3,
+      }),
+    );
+    store.applyRunEvent(
+      createRunEvent(runId, 1, 2, "task.revised", {
+        taskId: rootId,
+        patch: { goals: completed.root.goals },
+      }),
+    );
+    expect(
+      useEditorStore.getState().activeRun?.changedFields[rootId],
+    ).toEqual(["goals"]);
+
+    store.applyRunEvent(
+      createRunEvent(runId, 1, 3, "task.revised", {
+        taskId: rootId,
+        patch: { inputs: completed.root.inputs },
+      }),
+    );
+    expect(
+      useEditorStore.getState().activeRun?.changedFields[rootId],
+    ).toEqual(["goals", "inputs"]);
+
+    store.applyRunEvent(
+      createRunEvent(runId, 1, 4, "run.completed", { tree: completed }),
+    );
+    expect(useEditorStore.getState().tree.root.goals).toEqual(
+      completed.root.goals,
+    );
+    expect(useEditorStore.getState().history).toHaveLength(1);
+    useEditorStore.getState().undo();
+    expect(useEditorStore.getState().tree.root.goals).toEqual(base.root.goals);
+    expect(useEditorStore.getState().tree.root.inputs).toEqual([]);
+  });
+
   it("discards a failed overlay without adding undo history", () => {
     const store = useEditorStore.getState();
     store.beginRun(runId, "decompose", rootId);

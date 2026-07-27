@@ -129,6 +129,7 @@ interface AttemptContext {
   run: ManagedRun;
   rejectedTools: number;
   finished: boolean;
+  populatedFields: Set<"goals" | "inputs">;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -197,6 +198,24 @@ function assertFrozenTasksPreserved(
   visit(original.root);
 }
 
+function assertPopulateScopePreserved(original: TaskTree, draft: TaskTree) {
+  const frozenSnapshot = (tree: TaskTree) => ({
+    id: tree.root.id,
+    title: tree.root.title,
+    description: tree.root.description,
+    outputs: tree.root.outputs,
+    operator: tree.root.operator,
+    children: tree.root.children,
+  });
+  const originalFrozen = frozenSnapshot(original);
+  const draftFrozen = frozenSnapshot(draft);
+  if (JSON.stringify(originalFrozen) !== JSON.stringify(draftFrozen)) {
+    throw new AttemptFailure(
+      "Populate Root Brief may change only the Root Goals and Inputs.",
+    );
+  }
+}
+
 function unresolvedWarnings(
   tree: TaskTree,
   targetTaskId: string,
@@ -225,6 +244,29 @@ function parseToolArguments<T>(
   return schema.parse(call.function.arguments);
 }
 
+function parseStructuredJson(content: string): unknown {
+  const trimmed = content.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)?.[1];
+  const objectStart = trimmed.indexOf("{");
+  const objectEnd = trimmed.lastIndexOf("}");
+  const embedded =
+    objectStart >= 0 && objectEnd > objectStart
+      ? trimmed.slice(objectStart, objectEnd + 1)
+      : undefined;
+  const candidates = [trimmed, fenced, embedded].filter(
+    (candidate): candidate is string => Boolean(candidate),
+  );
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // Try the next bounded representation.
+    }
+  }
+  throw new SyntaxError("The model response did not contain valid JSON.");
+}
+
 export class RunManager {
   private readonly runs = new Map<string, ManagedRun>();
 
@@ -237,6 +279,18 @@ export class RunManager {
   start(request: StartRunRequest): RunSnapshot {
     const tree = parseTaskTree(request.tree);
     findTaskOrFail(tree, request.targetTaskId);
+    if (request.action === "populate") {
+      if (request.targetTaskId !== tree.root.id) {
+        throw new AttemptFailure(
+          "Populate Root Brief is available only on the Root Task.",
+        );
+      }
+      if (!tree.root.title.trim() || !tree.root.description.trim()) {
+        throw new AttemptFailure(
+          "Add a Root Title and Description before generating Goals and Inputs.",
+        );
+      }
+    }
     const run = new ManagedRun(this.idFactory(), {
       ...request,
       tree,
@@ -355,6 +409,7 @@ export class RunManager {
       run,
       rejectedTools: 0,
       finished: false,
+      populatedFields: new Set(),
     };
 
     if (
@@ -464,6 +519,14 @@ export class RunManager {
   }
 
   private assertWritable(context: AttemptContext, taskId: string) {
+    if (context.action === "populate") {
+      if (taskId !== context.original.root.id) {
+        throw new AttemptFailure(
+          "Populate Root Brief may revise only the Root Task.",
+        );
+      }
+      return;
+    }
     if (context.action === "collapse") {
       if (taskId !== context.targetTaskId) {
         throw new AttemptFailure(
@@ -525,6 +588,42 @@ export class RunManager {
           outputs,
           goals,
         } = input;
+        if (context.action === "populate") {
+          const hasGoals = goals !== undefined;
+          const hasInputs = inputs !== undefined;
+          if (
+            title !== undefined ||
+            description !== undefined ||
+            outputs !== undefined ||
+            hasGoals === hasInputs
+          ) {
+            throw new AttemptFailure(
+              "Populate Root Brief requires exactly one field per revise_task call: goals or inputs.",
+            );
+          }
+          const field = hasGoals ? "goals" : "inputs";
+          if (context.populatedFields.has(field)) {
+            throw new AttemptFailure(
+              `Populate Root Brief may revise ${field} only once.`,
+            );
+          }
+          if (field === "inputs" && !context.populatedFields.has("goals")) {
+            throw new AttemptFailure(
+              "Populate Root Brief must revise goals before inputs.",
+            );
+          }
+          if (goals && goals.length > 8) {
+            throw new AttemptFailure(
+              "Populate Root Brief accepts at most 8 Goals.",
+            );
+          }
+          if (inputs && inputs.length > 12) {
+            throw new AttemptFailure(
+              "Populate Root Brief accepts at most 12 Inputs.",
+            );
+          }
+          context.populatedFields.add(field);
+        }
         const patch = { title, description, inputs, outputs, goals };
         context.draft = reviseTask(context.draft, taskId, patch);
         context.run.emit("task.revised", { taskId, patch });
@@ -581,6 +680,15 @@ export class RunManager {
       }
       case "finish_run": {
         parseToolArguments(finishRunInputSchema, call);
+        if (
+          context.action === "populate" &&
+          (!context.populatedFields.has("goals") ||
+            !context.populatedFields.has("inputs"))
+        ) {
+          throw new AttemptFailure(
+            "Populate Root Brief must revise Goals and Inputs before finish_run.",
+          );
+        }
         context.finished = true;
         return { ok: true, status: "validating" };
       }
@@ -610,11 +718,14 @@ export class RunManager {
       context.draft,
       context.targetTaskId,
     );
+    if (context.action === "populate") {
+      assertPopulateScopePreserved(context.original, context.draft);
+    }
 
-    const warnings = unresolvedWarnings(
-      context.draft,
-      context.targetTaskId,
-    );
+    const warnings =
+      context.action === "populate"
+        ? []
+        : unresolvedWarnings(context.draft, context.targetTaskId);
     warnings.forEach((warning) =>
       context.run.emit("validation.warning", warning),
     );
@@ -653,7 +764,9 @@ export class RunManager {
 
     let audit: z.infer<typeof semanticAuditSchema>;
     try {
-      audit = semanticAuditSchema.parse(JSON.parse(response.content));
+      audit = semanticAuditSchema.parse(
+        parseStructuredJson(response.content),
+      );
     } catch {
       throw new AttemptFailure(
         "Semantic validation returned invalid structured output.",

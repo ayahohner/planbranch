@@ -11,7 +11,7 @@ import { RunManager } from "./run-manager";
 
 const startRunSchema: z.ZodType<StartRunRequest> = z
   .object({
-    action: z.enum(["decompose", "optimize", "collapse"]),
+    action: z.enum(["populate", "decompose", "optimize", "collapse"]),
     tree: taskTreeSchema,
     targetTaskId: z.uuid(),
   })

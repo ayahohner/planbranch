@@ -7,6 +7,7 @@ import {
   ListCollapse,
   Sparkles,
   Split,
+  WandSparkles,
 } from "lucide-react";
 import { memo } from "react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
@@ -158,7 +159,22 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
         <section
           className={`task-field-section goals-section ${changedFields.includes("goals") ? "run-field-changed" : ""}`}
         >
-          <span className="task-field-label">Goals</span>
+          <div className="root-field-heading">
+            <span className="task-field-label">Goals</span>
+            <button
+              className="populate-root-button"
+              disabled={
+                runDisabled ||
+                !task.title.trim() ||
+                !task.description.trim()
+              }
+              onClick={() => onRun("populate", task.id)}
+              type="button"
+            >
+              <WandSparkles size={12} />
+              Generate Goals &amp; Inputs
+            </button>
+          </div>
           <EditableList
             addLabel="Add Goal"
             emptyLabel="No goals yet"

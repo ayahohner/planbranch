@@ -50,7 +50,9 @@ export function ActivityPanel({
   if (!open) return null;
 
   const actionLabel =
-    summary?.action === "decompose"
+    summary?.action === "populate"
+      ? "Generate Goals & Inputs"
+      : summary?.action === "decompose"
       ? "Decompose"
       : summary?.action === "optimize"
         ? "Optimize Subtree"

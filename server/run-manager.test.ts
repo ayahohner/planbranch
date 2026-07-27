@@ -77,6 +77,19 @@ function collapsedTreeRequest(): StartRunRequest {
   };
 }
 
+function populatedTreeRequest(): StartRunRequest {
+  const tree = createEmptyTree(rootId);
+  tree.root.title = "Launch a Marketing Website";
+  tree.root.description =
+    "Create a focused website for an analytics startup serving small retailers.";
+  tree.root.outputs = ["Published Website"];
+  return {
+    action: "populate",
+    tree,
+    targetTaskId: rootId,
+  };
+}
+
 const successfulCollapseTools: ModelMessage = {
   content: "",
   toolCalls: [
@@ -97,11 +110,119 @@ const successfulCollapseTools: ModelMessage = {
 };
 
 const validAudit: ModelMessage = {
-  content: JSON.stringify({ valid: true, issues: [] }),
+  content: "```json\n{\"valid\":true,\"issues\":[]}\n```",
   toolCalls: [],
 };
 
 describe("RunManager", () => {
+  it("streams Root Goals and Inputs separately without changing other fields", async () => {
+    const model = new FakeModel(
+      [
+        {
+          content: "",
+          toolCalls: [
+            toolCall("revise_task", {
+              task_id: rootId,
+              goals: [
+                "Communicate the startup value clearly",
+                "Generate qualified demo requests",
+              ],
+            }),
+            toolCall("revise_task", {
+              task_id: rootId,
+              inputs: ["Startup Brief", "Target Audience"],
+            }),
+            toolCall("finish_run"),
+          ],
+        },
+      ],
+      [validAudit],
+    );
+    const manager = new RunManager(model, config, () => runId);
+    const request = populatedTreeRequest();
+    const started = manager.start(request);
+    const finished = await manager.waitForRun(started.id);
+
+    expect(finished.state).toBe("completed");
+    const revisions = finished.events.filter(
+      (event) => event.type === "task.revised",
+    );
+    expect(revisions).toHaveLength(2);
+    expect(
+      revisions.map((event) =>
+        Object.keys(
+          (event.payload as { patch: Record<string, unknown> }).patch,
+        ).filter(
+          (key) =>
+            (event.payload as { patch: Record<string, unknown> }).patch[key] !==
+            undefined,
+        ),
+      ),
+    ).toEqual([["goals"], ["inputs"]]);
+
+    const completion = finished.events.find(
+      (event) => event.type === "run.completed",
+    );
+    const result = (
+      completion?.payload as { tree: ReturnType<typeof createEmptyTree> }
+    ).tree;
+    expect(result.root).toMatchObject({
+      title: request.tree.root.title,
+      description: request.tree.root.description,
+      outputs: ["Published Website"],
+      goals: [
+        "Communicate the startup value clearly",
+        "Generate qualified demo requests",
+      ],
+      inputs: ["Startup Brief", "Target Audience"],
+      children: [],
+    });
+  });
+
+  it("rejects Populate Root Brief on a non-Root Task", () => {
+    let tree = createEmptyTree(rootId);
+    tree = addSubtask(tree, rootId, "Child", undefined, parentId).tree;
+    const manager = new RunManager(new FakeModel([]), config, () => runId);
+    expect(() =>
+      manager.start({
+        action: "populate",
+        tree,
+        targetTaskId: parentId,
+      }),
+    ).toThrow("available only on the Root Task");
+  });
+
+  it("rejects non-Goal and non-Input edits during Populate Root Brief", async () => {
+    const invalidEdit: ModelMessage = {
+      content: "",
+      toolCalls: [
+        toolCall("revise_task", {
+          task_id: rootId,
+          outputs: ["Changed Output"],
+        }),
+      ],
+    };
+    const manager = new RunManager(
+      new FakeModel([invalidEdit, invalidEdit, invalidEdit]),
+      { ...config, maxRejectedTools: 1 },
+      () => runId,
+    );
+    const started = manager.start(populatedTreeRequest());
+    const finished = await manager.waitForRun(started.id);
+
+    expect(finished.state).toBe("failed");
+    expect(
+      finished.events.filter((event) => event.type === "tool.rejected"),
+    ).toHaveLength(3);
+    expect(
+      finished.events.some((event) =>
+        JSON.stringify(event.payload).includes(
+          "exactly one field per revise_task call",
+        ),
+      ),
+    ).toBe(true);
+  });
+
   it("streams and commits a validated Collapse as one completed Run", async () => {
     const model = new FakeModel([successfulCollapseTools], [validAudit]);
     const manager = new RunManager(model, config, () => runId);

@@ -198,8 +198,8 @@ Only the Root Task may contain `goals`. IDs are application-generated UUIDs and 
 - The Root exposes a **Generate Goals & Inputs** action.
 - Generate Goals & Inputs is enabled only when both Title and Description contain non-whitespace text.
 - The action may replace only the Root Goals and Inputs. It must preserve the Root Title, Description, Outputs, Operator, children, and every non-Root Task.
-- Generated Goals are concise, testable outcomes rather than implementation steps.
-- Generated Inputs are Title Case Artifact Labels for information or materials required to pursue the Goals.
+- Generated Goals are concise, testable end-state outcomes rather than prerequisite projects or implementation steps.
+- Generated Inputs are Title Case Artifact Labels for source information or materials available before execution, not intermediate deliverables.
 - The model preserves useful existing Goals and Inputs, removes synonyms and weak placeholders, and does not invent specific facts absent from the brief.
 - The primary Root action is Decompose.
 
