@@ -89,6 +89,17 @@ export async function buildApp({
   });
 
   app.get<{ Params: { runId: string } }>(
+    "/api/runs/:runId",
+    async (request, reply) => {
+      const run = runManager.get(request.params.runId);
+      if (!run) {
+        return reply.status(404).send({ error: "Run not found." });
+      }
+      return run;
+    },
+  );
+
+  app.get<{ Params: { runId: string } }>(
     "/api/runs/:runId/events",
     async (request, reply) => {
       const run = runManager.getManaged(request.params.runId);

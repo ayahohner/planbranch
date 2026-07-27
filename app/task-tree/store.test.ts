@@ -148,6 +148,29 @@ describe("editor history", () => {
     );
   });
 
+  it("rolls back an active Run when its service connection is lost", () => {
+    const store = useEditorStore.getState();
+    store.beginRun(runId, "decompose", rootId);
+    store.applyRunEvent(
+      createRunEvent(runId, 1, 1, "task.revised", {
+        taskId: rootId,
+        patch: { description: "Draft description" },
+      }),
+    );
+
+    store.failActiveRun("The local model service stopped responding.");
+
+    expect(useEditorStore.getState().activeRun).toBeNull();
+    expect(useEditorStore.getState().tree.root.description).toBe(
+      "Describe the work, domain context, and constraints.",
+    );
+    expect(useEditorStore.getState().history).toHaveLength(0);
+    expect(useEditorStore.getState().runSummary?.state).toBe("failed");
+    expect(useEditorStore.getState().notice?.message).toContain(
+      "In-progress edits were undone",
+    );
+  });
+
   it("commits inline edits and undoes or redoes them transactionally", () => {
     useEditorStore.getState().reviseTask(rootId, {
       title: "Launch a Marketing Website",

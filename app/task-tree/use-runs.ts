@@ -35,6 +35,16 @@ interface HealthResponse {
   };
 }
 
+interface RunSnapshotResponse {
+  id: string;
+  state: "running" | "completed" | "failed" | "cancelled";
+  events: RunEvent[];
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
 export function useRuns() {
   const tree = useEditorStore((state) => state.tree);
   const activeRun = useEditorStore((state) => state.activeRun);
@@ -42,10 +52,13 @@ export function useRuns() {
   const beginRun = useEditorStore((state) => state.beginRun);
   const applyRunEvent = useEditorStore((state) => state.applyRunEvent);
   const cancelActiveRun = useEditorStore((state) => state.cancelActiveRun);
+  const failActiveRun = useEditorStore((state) => state.failActiveRun);
   const setModelHealth = useEditorStore((state) => state.setModelHealth);
   const setNotice = useEditorStore((state) => state.setNotice);
   const setActivityOpen = useEditorStore((state) => state.setActivityOpen);
   const sourceRef = useRef<EventSource | null>(null);
+  const lastSequenceRef = useRef(0);
+  const recoveringRef = useRef(false);
 
   const refreshHealth = useCallback(async () => {
     setModelHealth({
@@ -143,27 +156,91 @@ export function useRuns() {
         }
 
         beginRun(body.runId, action, targetTaskId);
+        lastSequenceRef.current = 0;
+        recoveringRef.current = false;
         sourceRef.current?.close();
         const source = new EventSource(`${API_BASE}/runs/${body.runId}/events`);
         sourceRef.current = source;
 
+        const acceptEvent = (event: RunEvent) => {
+          if (event.runId !== body.runId) return;
+          if (event.sequence <= lastSequenceRef.current) return;
+          lastSequenceRef.current = event.sequence;
+          applyRunEvent(event);
+          if (
+            event.type === "run.completed" ||
+            event.type === "run.failed" ||
+            event.type === "run.cancelled"
+          ) {
+            source.close();
+            if (sourceRef.current === source) sourceRef.current = null;
+            recoveringRef.current = false;
+            void refreshHealth();
+          }
+        };
+
         runEventTypes.forEach((type) => {
           source.addEventListener(type, (message) => {
-            const event = JSON.parse(
-              (message as MessageEvent<string>).data,
-            ) as RunEvent;
-            applyRunEvent(event);
-            if (
-              event.type === "run.completed" ||
-              event.type === "run.failed" ||
-              event.type === "run.cancelled"
-            ) {
+            try {
+              acceptEvent(
+                JSON.parse((message as MessageEvent<string>).data) as RunEvent,
+              );
+            } catch {
               source.close();
-              sourceRef.current = null;
+              if (sourceRef.current === source) sourceRef.current = null;
+              failActiveRun(
+                "The local model service sent an invalid Run event.",
+              );
               void refreshHealth();
             }
           });
         });
+
+        source.onerror = () => {
+          if (sourceRef.current !== source || recoveringRef.current) return;
+          recoveringRef.current = true;
+          void (async () => {
+            let lastError = "The local model service stopped responding.";
+            for (let attempt = 1; attempt <= 3; attempt += 1) {
+              if (sourceRef.current !== source) return;
+              try {
+                const response = await fetch(
+                  `${API_BASE}/runs/${body.runId}`,
+                  { cache: "no-store" },
+                );
+                if (!response.ok) {
+                  throw new Error(
+                    response.status === 404
+                      ? "The model service no longer has this Run."
+                      : `Run recovery returned ${response.status}.`,
+                  );
+                }
+                const snapshot =
+                  (await response.json()) as RunSnapshotResponse;
+                snapshot.events
+                  .filter(
+                    (event) => event.sequence > lastSequenceRef.current,
+                  )
+                  .sort((left, right) => left.sequence - right.sequence)
+                  .forEach(acceptEvent);
+                recoveringRef.current = false;
+                return;
+              } catch (error) {
+                lastError =
+                  error instanceof Error ? error.message : lastError;
+                if (attempt < 3) await wait(250 * attempt);
+              }
+            }
+            if (sourceRef.current !== source) return;
+            source.close();
+            sourceRef.current = null;
+            recoveringRef.current = false;
+            failActiveRun(
+              `The Run stream disconnected. ${lastError}`,
+            );
+            void refreshHealth();
+          })();
+        };
       } catch (error) {
         setActivityOpen(true);
         setNotice({
@@ -177,6 +254,7 @@ export function useRuns() {
       activeRun,
       applyRunEvent,
       beginRun,
+      failActiveRun,
       modelHealth,
       refreshHealth,
       setActivityOpen,
@@ -203,15 +281,19 @@ export function useRuns() {
       sourceRef.current = null;
       cancelActiveRun();
     } catch (error) {
+      sourceRef.current?.close();
+      sourceRef.current = null;
+      cancelActiveRun();
       setNotice({
         kind: "error",
         message:
           error instanceof Error
-            ? `Cancellation failed: ${error.message}`
-            : "The cancellation request could not reach the local service.",
+            ? `The service could not confirm cancellation (${error.message}). The local draft was undone.`
+            : "The service could not confirm cancellation. The local draft was undone.",
       });
+      void refreshHealth();
     }
-  }, [activeRun, cancelActiveRun, setNotice]);
+  }, [activeRun, cancelActiveRun, refreshHealth, setNotice]);
 
   return {
     startRun,

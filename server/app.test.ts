@@ -94,6 +94,30 @@ describe("model service HTTP policy", () => {
     await app.close();
   });
 
+  it("returns a Run snapshot so clients can recover a dropped event stream", async () => {
+    const snapshot = {
+      id: "example",
+      state: "running" as const,
+      events: [],
+    };
+    const runManager = {
+      get: () => snapshot,
+    } as unknown as RunManager;
+    const app = await buildApp({
+      config,
+      model: new IdleModel(),
+      runManager,
+    });
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/runs/example",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(snapshot);
+    await app.close();
+  });
+
   it("adds localhost CORS headers to the hijacked event stream", async () => {
     const terminalEvent = {
       runId: "example",

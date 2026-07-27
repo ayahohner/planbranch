@@ -122,6 +122,7 @@ interface EditorState {
   ) => void;
   applyRunEvent: (event: RunEvent) => void;
   cancelActiveRun: () => void;
+  failActiveRun: (message: string) => void;
   clearRun: () => void;
   setActivityOpen: (open: boolean) => void;
   setModelHealth: (health: ModelHealthState) => void;
@@ -522,6 +523,40 @@ export const useEditorStore = create<EditorState>((set) => ({
         notice: {
           kind: "info",
           message: "The Run was cancelled. In-progress edits were undone.",
+        },
+      };
+    }),
+
+  failActiveRun: (message) =>
+    set((state) => {
+      if (!state.activeRun) return state;
+      const timestamp = new Date().toISOString();
+      return {
+        ...state,
+        activeRun: null,
+        runSummary: state.runSummary
+          ? {
+              ...state.runSummary,
+              state: "failed",
+              attempt: state.activeRun.attempt,
+            }
+          : null,
+        runLogs: [
+          ...state.runLogs,
+          {
+            id: `local-failure-${timestamp}`,
+            type: "run.failed",
+            level: "error",
+            title: "Run connection lost",
+            detail: message,
+            attempt: state.activeRun.attempt,
+            timestamp,
+          },
+        ],
+        activityOpen: true,
+        notice: {
+          kind: "error",
+          message: `${message} In-progress edits were undone.`,
         },
       };
     }),
