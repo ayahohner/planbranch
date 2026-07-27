@@ -94,6 +94,46 @@ describe("model service HTTP policy", () => {
     await app.close();
   });
 
+  it("adds localhost CORS headers to the hijacked event stream", async () => {
+    const terminalEvent = {
+      runId: "example",
+      attempt: 1,
+      sequence: 1,
+      timestamp: new Date().toISOString(),
+      type: "run.completed",
+      payload: {},
+    };
+    const runManager = {
+      getManaged: () => ({
+        state: "completed",
+        subscribe: (
+          _afterSequence: number,
+          listener: (event: typeof terminalEvent) => void,
+        ) => {
+          listener(terminalEvent);
+          return () => {};
+        },
+      }),
+    } as unknown as RunManager;
+    const app = await buildApp({
+      config,
+      model: new IdleModel(),
+      runManager,
+    });
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/runs/example/events",
+      headers: { origin: "http://localhost:3000" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["access-control-allow-origin"]).toBe(
+      "http://localhost:3000",
+    );
+    expect(response.headers.vary).toBe("Origin");
+    await app.close();
+  });
+
   it("acknowledges cancellation before scheduling the model abort", async () => {
     let cancelled = false;
     const runManager = {

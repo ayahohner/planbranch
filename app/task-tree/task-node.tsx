@@ -26,6 +26,7 @@ export interface TaskNodeData extends Record<string, unknown> {
   order: number;
   onRun: (action: RunAction, taskId: string) => void;
   runDisabled: boolean;
+  hasOutgoing: boolean;
   visualState?: "new" | "changed" | "removing";
   changedFields: string[];
 }
@@ -73,6 +74,7 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
     order,
     onRun,
     runDisabled,
+    hasOutgoing,
     visualState,
     changedFields,
   } = data;
@@ -226,7 +228,7 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
           operator={task.operator}
         />
       </footer>
-      {task.children.length > 0 ? (
+      {hasOutgoing ? (
         <Handle position={Position.Bottom} type="source" />
       ) : null}
     </article>

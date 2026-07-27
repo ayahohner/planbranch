@@ -33,6 +33,6 @@ test("server-renders the Task Tree application shell", async () => {
   assert.match(html, /local planning workspace/);
   assert.match(html, /Ordered decomposition/);
   assert.match(html, /og\.png/);
-  assert.doesNotMatch(html, /Codex/);
+  assert.match(html, /OpenAI · Codex app-server/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });

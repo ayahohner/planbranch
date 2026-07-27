@@ -16,6 +16,7 @@ const startRunSchema: z.ZodType<StartRunRequest> = z
     targetTaskId: z.uuid(),
   })
   .strict();
+const localWebOrigin = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
 export interface AppDependencies {
   config: ServerConfig;
@@ -30,7 +31,7 @@ export async function buildApp({
 }: AppDependencies): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   await app.register(cors, {
-    origin: /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/,
+    origin: localWebOrigin,
     methods: ["GET", "HEAD", "POST", "DELETE", "OPTIONS"],
   });
 
@@ -96,12 +97,21 @@ export async function buildApp({
       }
 
       const lastEventId = Number(request.headers["last-event-id"] ?? 0);
+      const origin = request.headers.origin;
+      const corsHeaders =
+        typeof origin === "string" && localWebOrigin.test(origin)
+          ? {
+              "Access-Control-Allow-Origin": origin,
+              Vary: "Origin",
+            }
+          : {};
       reply.hijack();
       reply.raw.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
         "X-Accel-Buffering": "no",
+        ...corsHeaders,
       });
       reply.raw.write("retry: 1000\n\n");
 

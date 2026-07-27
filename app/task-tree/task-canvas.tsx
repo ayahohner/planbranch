@@ -41,6 +41,9 @@ function buildFlow(
   changedFields: Record<string, string[]>,
   ghostBranches: GhostBranch[],
 ): { nodes: TaskFlowNode[]; edges: Edge[]; structureKey: string } {
+  const ghostParentIds = new Set(
+    ghostBranches.map((branch) => branch.parentId),
+  );
   const graph = new dagre.graphlib.Graph();
   graph.setDefaultEdgeLabel(() => ({}));
   graph.setGraph({
@@ -75,6 +78,8 @@ function buildFlow(
         order,
         onRun,
         runDisabled: runDisabled || removing,
+        hasOutgoing:
+          task.children.length > 0 || ghostParentIds.has(task.id),
         visualState: removing
           ? "removing"
           : newTaskIds.includes(task.id)
