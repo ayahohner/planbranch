@@ -15,6 +15,7 @@ import {
 } from "@xyflow/react";
 import { useEffect, useMemo } from "react";
 import type { RunAction, Task, TaskTree } from "../../packages/domain/src";
+import type { GhostBranch } from "./store";
 import { TaskNode, type TaskFlowNode } from "./task-node";
 
 const nodeTypes: NodeTypes = { task: TaskNode };
@@ -36,6 +37,9 @@ function buildFlow(
   tree: TaskTree,
   onRun: (action: RunAction, taskId: string) => void,
   runDisabled: boolean,
+  newTaskIds: string[],
+  changedFields: Record<string, string[]>,
+  ghostBranches: GhostBranch[],
 ): { nodes: TaskFlowNode[]; edges: Edge[]; structureKey: string } {
   const graph = new dagre.graphlib.Graph();
   graph.setDefaultEdgeLabel(() => ({}));
@@ -56,6 +60,7 @@ function buildFlow(
     parentId: string | null,
     order: number,
     isRoot = false,
+    removing = false,
   ) => {
     const height = estimateHeight(task, isRoot);
     graph.setNode(task.id, { width: NODE_WIDTH, height });
@@ -64,7 +69,21 @@ function buildFlow(
       type: "task",
       position: { x: 0, y: 0 },
       style: { width: NODE_WIDTH },
-      data: { task, isRoot, order, onRun, runDisabled },
+      data: {
+        task,
+        isRoot,
+        order,
+        onRun,
+        runDisabled: runDisabled || removing,
+        visualState: removing
+          ? "removing"
+          : newTaskIds.includes(task.id)
+            ? "new"
+            : changedFields[task.id]?.length
+              ? "changed"
+              : undefined,
+        changedFields: removing ? [] : (changedFields[task.id] ?? []),
+      },
     });
     structure.push(`${parentId ?? "root"}:${task.id}`);
 
@@ -81,16 +100,25 @@ function buildFlow(
           height: 14,
           color: "#a4a1ad",
         },
-        style: { stroke: "#a4a1ad", strokeWidth: 1.5 },
+        style: removing
+          ? {
+              stroke: "#c96c5b",
+              strokeWidth: 1.5,
+              strokeDasharray: "5 5",
+            }
+          : { stroke: "#a4a1ad", strokeWidth: 1.5 },
       });
     }
 
     task.children.forEach((child, index) =>
-      visit(child, task.id, index + 1),
+      visit(child, task.id, index + 1, false, removing),
     );
   };
 
   visit(tree.root, null, 1, true);
+  ghostBranches.forEach((branch) =>
+    visit(branch.task, branch.parentId, branch.order, false, true),
+  );
   dagre.layout(graph);
   const positioned = nodes.map((node) => {
     const position = graph.node(node.id);
@@ -121,14 +149,35 @@ function Canvas({
   tree,
   onRun,
   runDisabled,
+  newTaskIds,
+  changedFields,
+  ghostBranches,
 }: {
   tree: TaskTree;
   onRun: (action: RunAction, taskId: string) => void;
   runDisabled: boolean;
+  newTaskIds: string[];
+  changedFields: Record<string, string[]>;
+  ghostBranches: GhostBranch[];
 }) {
   const flow = useMemo(
-    () => buildFlow(tree, onRun, runDisabled),
-    [tree, onRun, runDisabled],
+    () =>
+      buildFlow(
+        tree,
+        onRun,
+        runDisabled,
+        newTaskIds,
+        changedFields,
+        ghostBranches,
+      ),
+    [
+      tree,
+      onRun,
+      runDisabled,
+      newTaskIds,
+      changedFields,
+      ghostBranches,
+    ],
   );
 
   return (
@@ -185,14 +234,27 @@ export function TaskCanvas({
   tree,
   onRun,
   runDisabled = false,
+  newTaskIds = [],
+  changedFields = {},
+  ghostBranches = [],
 }: {
   tree: TaskTree;
   onRun: (action: RunAction, taskId: string) => void;
   runDisabled?: boolean;
+  newTaskIds?: string[];
+  changedFields?: Record<string, string[]>;
+  ghostBranches?: GhostBranch[];
 }) {
   return (
     <ReactFlowProvider>
-      <Canvas onRun={onRun} runDisabled={runDisabled} tree={tree} />
+      <Canvas
+        changedFields={changedFields}
+        ghostBranches={ghostBranches}
+        newTaskIds={newTaskIds}
+        onRun={onRun}
+        runDisabled={runDisabled}
+        tree={tree}
+      />
     </ReactFlowProvider>
   );
 }

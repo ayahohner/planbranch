@@ -58,6 +58,7 @@ export function Toolbar({
   onUndo,
   onRedo,
   onOpenActivity,
+  locked,
 }: {
   canUndo: boolean;
   canRedo: boolean;
@@ -69,6 +70,7 @@ export function Toolbar({
   onUndo: () => void;
   onRedo: () => void;
   onOpenActivity: () => void;
+  locked: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
@@ -84,10 +86,11 @@ export function Toolbar({
       </div>
 
       <div className="toolbar-group" aria-label="File actions">
-        <ToolbarButton label="New Tree" onClick={onNew}>
+        <ToolbarButton disabled={locked} label="New Tree" onClick={onNew}>
           <FilePlus2 size={17} />
         </ToolbarButton>
         <ToolbarButton
+          disabled={locked}
           label="Import JSON"
           onClick={() => inputRef.current?.click()}
         >
@@ -108,10 +111,18 @@ export function Toolbar({
           type="file"
         />
         <span className="toolbar-divider" />
-        <ToolbarButton disabled={!canUndo} label="Undo" onClick={onUndo}>
+        <ToolbarButton
+          disabled={locked || !canUndo}
+          label="Undo"
+          onClick={onUndo}
+        >
           <Undo2 size={17} />
         </ToolbarButton>
-        <ToolbarButton disabled={!canRedo} label="Redo" onClick={onRedo}>
+        <ToolbarButton
+          disabled={locked || !canRedo}
+          label="Redo"
+          onClick={onRedo}
+        >
           <Redo2 size={17} />
         </ToolbarButton>
       </div>

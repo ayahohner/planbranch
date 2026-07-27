@@ -213,6 +213,52 @@
     0 4px 12px rgba(39, 35, 55, 0.08);
 }
 
+.task-node[data-run-state="new"] {
+  border-color: #77a8df;
+  animation: task-arrive 360ms ease-out;
+  box-shadow:
+    0 0 0 4px rgba(86, 145, 209, 0.12),
+    0 18px 44px rgba(39, 35, 55, 0.1);
+}
+
+.task-node[data-run-state="changed"] {
+  border-color: #79b493;
+  box-shadow:
+    0 0 0 4px rgba(73, 157, 110, 0.1),
+    0 18px 44px rgba(39, 35, 55, 0.1);
+}
+
+.task-node[data-run-state="removing"] {
+  pointer-events: none;
+  opacity: 0.62;
+  border-color: #c96c5b;
+  filter: saturate(0.7);
+}
+
+.task-node[data-run-state="removing"]::after {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  border-radius: inherit;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 8px,
+    rgba(201, 108, 91, 0.055) 8px,
+    rgba(201, 108, 91, 0.055) 16px
+  );
+  content: "";
+}
+
+.run-field-changed {
+  border-radius: 8px;
+  background: rgba(91, 170, 124, 0.12);
+  box-shadow: 0 0 0 3px rgba(91, 170, 124, 0.08);
+  transition:
+    background 220ms ease,
+    box-shadow 220ms ease;
+}
+
 .task-node-compound {
   border-top-color: #6659d6;
 }
@@ -665,6 +711,290 @@ input.task-title {
   animation: notice-in 180ms ease-out;
 }
 
+.activity-panel {
+  position: fixed;
+  z-index: 50;
+  top: 78px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  width: min(376px, calc(100vw - 24px));
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  background: rgba(253, 252, 249, 0.98);
+  box-shadow: 0 24px 70px rgba(31, 28, 38, 0.2);
+  backdrop-filter: blur(18px);
+  animation: panel-in 200ms ease-out;
+}
+
+.activity-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.activity-header h2 {
+  margin: 3px 0 0;
+  font-size: 19px;
+  letter-spacing: -0.035em;
+}
+
+.activity-eyebrow {
+  color: var(--app-muted);
+  font-size: 9px;
+  font-weight: 680;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.activity-header > button,
+.health-card > button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--app-muted);
+  background: transparent;
+}
+
+.activity-header > button:hover,
+.health-card > button:hover {
+  color: var(--app-accent);
+  background: #f0eefb;
+}
+
+.health-card {
+  display: grid;
+  grid-template-columns: 31px 1fr 28px;
+  gap: 9px;
+  align-items: center;
+  margin: 12px 12px 0;
+  padding: 10px;
+  border: 1px solid;
+  border-radius: 12px;
+}
+
+.health-ready {
+  color: #407257;
+  border-color: #c6dfd0;
+  background: #f0f8f3;
+}
+
+.health-checking {
+  color: #5b55a4;
+  border-color: #d6d2ee;
+  background: #f5f3fc;
+}
+
+.health-missing,
+.health-offline {
+  color: #9a5042;
+  border-color: #ebc8c0;
+  background: #fff4f1;
+}
+
+.health-icon {
+  display: grid;
+  place-items: center;
+}
+
+.health-card > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.health-card small {
+  font-size: 9px;
+  font-weight: 690;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.health-card strong,
+.health-card code {
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-progress-card {
+  margin: 9px 12px 0;
+  padding: 11px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: white;
+}
+
+.run-progress-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--app-muted);
+  font-size: 10px;
+}
+
+.run-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.run-state-running {
+  color: #5145c8;
+}
+
+.run-state-completed {
+  color: #407257;
+}
+
+.run-state-failed {
+  color: #a64f3e;
+}
+
+.run-state-cancelled {
+  color: #8b6d2d;
+}
+
+.attempt-dots {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.attempt-dots span {
+  height: 4px;
+  border-radius: 4px;
+  background: #e8e5eb;
+}
+
+.attempt-dots span.is-used {
+  background: #756bda;
+}
+
+.attempt-dots span.is-failed {
+  background: #c96c5b;
+}
+
+.cancel-run {
+  width: 100%;
+  margin-top: 10px;
+  padding: 7px;
+  border: 1px solid #e2bbb3;
+  border-radius: 8px;
+  color: #9a5042;
+  background: #fff7f5;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.activity-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.empty-activity {
+  display: flex;
+  min-height: 180px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #aaa6af;
+  text-align: center;
+}
+
+.empty-activity p {
+  max-width: 230px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.log-entry {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 8px;
+  padding-bottom: 14px;
+}
+
+.log-entry:not(:last-child)::before {
+  position: absolute;
+  top: 23px;
+  bottom: 2px;
+  left: 11px;
+  width: 1px;
+  background: #dfdce3;
+  content: "";
+}
+
+.log-icon {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 23px;
+  height: 23px;
+  border: 1px solid;
+  border-radius: 50%;
+  background: white;
+}
+
+.log-info .log-icon {
+  color: #716b80;
+  border-color: #d4d0d9;
+}
+
+.log-success .log-icon {
+  color: #4e8a66;
+  border-color: #b8dbc7;
+}
+
+.log-warning .log-icon {
+  color: #a57728;
+  border-color: #e5d09e;
+}
+
+.log-error .log-icon {
+  color: #ac5948;
+  border-color: #e6b6ad;
+}
+
+.log-entry strong {
+  display: block;
+  color: #494550;
+  font-size: 11px;
+}
+
+.log-entry p {
+  margin: 3px 0;
+  color: #827d89;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.log-entry small {
+  color: #aaa6af;
+  font-family: var(--font-geist-mono);
+  font-size: 8px;
+}
+
+.spin {
+  animation: spin 1.1s linear infinite;
+}
+
 .app-notice > span {
   flex: 1;
 }
@@ -775,6 +1105,26 @@ input.task-title {
 @keyframes overlay-in {
   from {
     opacity: 0;
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+@keyframes task-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 

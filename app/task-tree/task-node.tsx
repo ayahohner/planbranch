@@ -25,6 +25,8 @@ export interface TaskNodeData extends Record<string, unknown> {
   order: number;
   onRun: (action: RunAction, taskId: string) => void;
   runDisabled: boolean;
+  visualState?: "new" | "changed" | "removing";
+  changedFields: string[];
 }
 
 export type TaskFlowNode = Node<TaskNodeData, "task">;
@@ -64,7 +66,15 @@ function ActionButton({
 }
 
 function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
-  const { task, isRoot, order, onRun, runDisabled } = data;
+  const {
+    task,
+    isRoot,
+    order,
+    onRun,
+    runDisabled,
+    visualState,
+    changedFields,
+  } = data;
   const kind = deriveTaskKind(task);
   const revise = useEditorStore((state) => state.reviseTask);
   const setOperator = useEditorStore((state) => state.setOperator);
@@ -74,6 +84,7 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
     <article
       className={`task-node task-node-${kind} ${isRoot ? "task-node-root" : ""}`}
       data-task-id={task.id}
+      data-run-state={visualState}
     >
       {!isRoot ? <Handle position={Position.Top} type="target" /> : null}
       <header className="task-node-header">
@@ -86,7 +97,9 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
             ) : (
               <Split size={12} />
             )}
-            {isRoot
+            {visualState === "removing"
+              ? "Removing"
+              : isRoot
               ? "Root Brief"
               : kind === "compound"
                 ? "Compound"
@@ -126,13 +139,13 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
       </header>
 
       <InlineText
-        className="task-title"
+        className={`task-title ${changedFields.includes("title") ? "run-field-changed" : ""}`}
         onCommit={(title) => revise(task.id, { title }, "Edit Task title")}
         placeholder="Task title"
         value={task.title}
       />
       <InlineText
-        className="task-description"
+        className={`task-description ${changedFields.includes("description") ? "run-field-changed" : ""}`}
         multiline
         onCommit={(description) =>
           revise(task.id, { description }, "Edit Task description")
@@ -142,7 +155,9 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
       />
 
       {isRoot ? (
-        <section className="task-field-section goals-section">
+        <section
+          className={`task-field-section goals-section ${changedFields.includes("goals") ? "run-field-changed" : ""}`}
+        >
           <span className="task-field-label">Goals</span>
           <EditableList
             addLabel="Add Goal"
@@ -156,7 +171,9 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
       ) : null}
 
       <div className="task-io-grid">
-        <section className="task-field-section">
+        <section
+          className={`task-field-section ${changedFields.includes("inputs") ? "run-field-changed" : ""}`}
+        >
           <span className="task-field-label">Inputs</span>
           <EditableList
             addLabel="Add Input"
@@ -167,7 +184,9 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
             values={task.inputs}
           />
         </section>
-        <section className="task-field-section">
+        <section
+          className={`task-field-section ${changedFields.includes("outputs") ? "run-field-changed" : ""}`}
+        >
           <span className="task-field-label">Outputs</span>
           <EditableList
             addLabel="Add Output"
@@ -180,7 +199,9 @@ function TaskNodeComponent({ data }: NodeProps<TaskFlowNode>) {
         </section>
       </div>
 
-      <footer className="task-node-footer">
+      <footer
+        className={`task-node-footer ${changedFields.includes("operator") ? "run-field-changed" : ""}`}
+      >
         <span className="task-field-label">Operator</span>
         <OperatorEditor
           disabled={kind === "compound"}

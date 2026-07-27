@@ -2,17 +2,19 @@
 
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { AlertCircle, CheckCircle2, Info, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   exportTaskTree,
   importTaskTree,
   type RunAction,
   type TaskTree,
 } from "../../packages/domain/src";
+import { ActivityPanel } from "./activity-panel";
 import { ConfirmDialog } from "./confirm-dialog";
 import { useEditorStore } from "./store";
 import { TaskCanvas } from "./task-canvas";
 import { Toolbar } from "./toolbar";
+import { useRuns } from "./use-runs";
 
 type PendingAction =
   | { type: "new" }
@@ -24,28 +26,29 @@ export function TaskTreeApp() {
   const history = useEditorStore((state) => state.history);
   const future = useEditorStore((state) => state.future);
   const notice = useEditorStore((state) => state.notice);
+  const activeRun = useEditorStore((state) => state.activeRun);
+  const runSummary = useEditorStore((state) => state.runSummary);
+  const runLogs = useEditorStore((state) => state.runLogs);
+  const activityOpen = useEditorStore((state) => state.activityOpen);
   const undo = useEditorStore((state) => state.undo);
   const redo = useEditorStore((state) => state.redo);
   const newTree = useEditorStore((state) => state.newTree);
   const replaceTree = useEditorStore((state) => state.replaceTree);
   const setNotice = useEditorStore((state) => state.setNotice);
+  const setActivityOpen = useEditorStore((state) => state.setActivityOpen);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const {
+    startRun,
+    cancelRun,
+    refreshHealth,
+    modelHealth,
+  } = useRuns();
 
   useEffect(() => {
     if (!notice) return;
     const timeout = setTimeout(() => setNotice(null), 4200);
     return () => clearTimeout(timeout);
   }, [notice, setNotice]);
-
-  const runTask = useCallback(
-    (action: RunAction) => {
-      setNotice({
-        kind: "info",
-        message: `${action === "optimize" ? "Optimize" : action === "collapse" ? "Collapse" : "Decompose"} will use the local model once it is ready.`,
-      });
-    },
-    [setNotice],
-  );
 
   const readImport = async (file: File) => {
     if (file.size > 5 * 1024 * 1024) {
@@ -84,31 +87,55 @@ export function TaskTreeApp() {
 
   return (
     <Tooltip.Provider delayDuration={350}>
-      <main className="task-tree-app">
+      <main className={`task-tree-app ${activeRun ? "is-running" : ""}`}>
         <Toolbar
           canRedo={future.length > 0}
           canUndo={history.length > 0}
-          modelLabel="Checking Ollama…"
-          modelReady={false}
+          locked={Boolean(activeRun)}
+          modelLabel={
+            activeRun
+              ? `Attempt ${Math.max(activeRun.attempt, 1)} of ${activeRun.maxAttempts}`
+              : modelHealth.status === "checking"
+                ? "Checking Ollama…"
+                : modelHealth.name
+          }
+          modelReady={modelHealth.status === "ready"}
           onExport={exportJson}
           onImport={(file) => void readImport(file)}
           onNew={() => setPendingAction({ type: "new" })}
-          onOpenActivity={() =>
-            setNotice({
-              kind: "info",
-              message: "Model activity will appear here during a Run.",
-            })
-          }
+          onOpenActivity={() => setActivityOpen(true)}
           onRedo={redo}
           onUndo={undo}
         />
         <section className="canvas-shell" aria-label="Task Tree canvas">
           <div className="canvas-context">
             <span>Ordered decomposition</span>
-            <strong>{countTasks(tree.root)} Tasks</strong>
+            <strong>
+              {countTasks((activeRun?.overlayTree ?? tree).root)} Tasks
+            </strong>
           </div>
-          <TaskCanvas onRun={runTask} tree={tree} />
+          <TaskCanvas
+            changedFields={activeRun?.changedFields}
+            ghostBranches={activeRun?.ghostBranches}
+            newTaskIds={activeRun?.newTaskIds}
+            onRun={(action: RunAction, taskId: string) =>
+              void startRun(action, taskId)
+            }
+            runDisabled={Boolean(activeRun)}
+            tree={activeRun?.overlayTree ?? tree}
+          />
         </section>
+
+        <ActivityPanel
+          active={Boolean(activeRun)}
+          logs={runLogs}
+          model={modelHealth}
+          onCancel={() => void cancelRun()}
+          onClose={() => setActivityOpen(false)}
+          onRefreshModel={() => void refreshHealth()}
+          open={activityOpen}
+          summary={runSummary}
+        />
 
         {notice ? (
           <div className={`app-notice notice-${notice.kind}`} role="status">
@@ -164,5 +191,19 @@ export function TaskTreeApp() {
 }
 
 function countTasks(task: TaskTree["root"]): number {
-  return 1 + task.children.reduce((total, child) => total + countTasks(child as TaskTree["root"]), 0);
+  return (
+    1 +
+    task.children.reduce(
+      (total, child) =>
+        total + 1 + child.children.reduce(countDescendants, 0),
+      0,
+    )
+  );
+}
+
+function countDescendants(
+  total: number,
+  task: TaskTree["root"]["children"][number],
+): number {
+  return total + 1 + task.children.reduce(countDescendants, 0);
 }
