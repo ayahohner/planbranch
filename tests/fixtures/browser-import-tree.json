@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "root": {
+    "id": "00000000-0000-4000-8000-000000000101",
+    "title": "Imported Browser QA Tree",
+    "description": "A deterministic fixture for exercising JSON import and tree rendering.",
+    "inputs": [
+      "QA Brief"
+    ],
+    "outputs": [
+      "Verified Workspace"
+    ],
+    "goals": [
+      "Verify JSON import",
+      "Verify Compound Task rendering"
+    ],
+    "children": [
+      {
+        "id": "00000000-0000-4000-8000-000000000102",
+        "title": "Inspect Imported Tree",
+        "description": "Confirm that imported semantic fields appear in the canvas.",
+        "inputs": [
+          "QA Brief"
+        ],
+        "outputs": [
+          "Verified Workspace"
+        ],
+        "operator": {
+          "executor": "deterministic",
+          "name": "inspect-imported-tree"
+        },
+        "children": []
+      }
+    ]
+  }
+}

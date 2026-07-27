@@ -31,6 +31,7 @@ export async function buildApp({
   const app = Fastify({ logger: false });
   await app.register(cors, {
     origin: /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/,
+    methods: ["GET", "HEAD", "POST", "DELETE", "OPTIONS"],
   });
 
   app.get("/api/health", async () => {
@@ -126,13 +127,15 @@ export async function buildApp({
   app.delete<{ Params: { runId: string } }>(
     "/api/runs/:runId",
     async (request, reply) => {
-      const cancelled = runManager.cancel(request.params.runId);
-      if (!cancelled) {
+      const run = runManager.get(request.params.runId);
+      if (!run || run.state !== "running") {
         return reply
           .status(404)
           .send({ error: "No active Run was found." });
       }
-      return reply.status(202).send({ cancelled: true });
+      reply.status(202).send({ cancelled: true });
+      setTimeout(() => runManager.cancel(request.params.runId), 0);
+      return reply;
     },
   );
 

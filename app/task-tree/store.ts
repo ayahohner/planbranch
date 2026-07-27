@@ -27,7 +27,7 @@ import {
 
 enablePatches();
 
-interface HistoryEntry {
+export interface HistoryEntry {
   label: string;
   patches: Patch[];
   inversePatches: Patch[];
@@ -102,6 +102,11 @@ interface EditorState {
   setOperator: (taskId: string, operator: Operator) => void;
   clearOperator: (taskId: string) => void;
   replaceTree: (tree: TaskTree, notice?: EditorNotice) => void;
+  restoreWorkspace: (
+    tree: TaskTree,
+    history: HistoryEntry[],
+    future: HistoryEntry[],
+  ) => void;
   newTree: () => void;
   undo: () => void;
   redo: () => void;
@@ -112,6 +117,7 @@ interface EditorState {
     targetTaskId: string,
   ) => void;
   applyRunEvent: (event: RunEvent) => void;
+  cancelActiveRun: () => void;
   clearRun: () => void;
   setActivityOpen: (open: boolean) => void;
   setModelHealth: (health: ModelHealthState) => void;
@@ -202,6 +208,16 @@ export const useEditorStore = create<EditorState>((set) => ({
       history: [],
       future: [],
       notice: notice ?? null,
+    }),
+
+  restoreWorkspace: (tree, history, future) =>
+    set({
+      tree: parseTaskTree(tree),
+      history,
+      future,
+      activeRun: null,
+      runSummary: null,
+      runLogs: [],
     }),
 
   newTree: () =>
@@ -467,6 +483,36 @@ export const useEditorStore = create<EditorState>((set) => ({
             }
           : null,
         runLogs,
+      };
+    }),
+
+  cancelActiveRun: () =>
+    set((state) => {
+      if (!state.activeRun) return state;
+      const timestamp = new Date().toISOString();
+      return {
+        ...state,
+        activeRun: null,
+        runSummary: state.runSummary
+          ? { ...state.runSummary, state: "cancelled" }
+          : null,
+        runLogs: [
+          ...state.runLogs,
+          {
+            id: `local-cancel-${timestamp}`,
+            type: "run.cancelled",
+            level: "warning",
+            title: "Run cancelled",
+            detail: "In-progress edits were undone.",
+            attempt: state.activeRun.attempt,
+            timestamp,
+          },
+        ],
+        activityOpen: true,
+        notice: {
+          kind: "info",
+          message: "The Run was cancelled. In-progress edits were undone.",
+        },
       };
     }),
 

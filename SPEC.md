@@ -299,6 +299,10 @@ There is no general delete, Remove and Fold, or promote-children operation in th
 - Failed and cancelled Runs discard the overlay and leave history unchanged.
 - Undoing Collapse restores the complete former subtree.
 - Importing a file replaces the current tree after confirmation and clears undo history.
+- The committed Task Tree and up to 500 undo/redo entries are saved to versioned browser local storage after every committed change.
+- Page load restores the saved committed workspace before further user interaction.
+- Active Run overlays, pending model requests, notices, health state, and activity logs are never persisted.
+- Invalid or incompatible saved data is discarded without preventing the app from opening.
 
 ### 6.8 Import and Export
 
@@ -710,6 +714,7 @@ Do not display raw chain-of-thought.
 - Do not silently download models.
 - Do not execute described Operators.
 - Keep all tree data local unless the user explicitly exports a file.
+- Browser cancellation preflight permits `DELETE` only from localhost development origins.
 
 ## 15. Testing Strategy
 

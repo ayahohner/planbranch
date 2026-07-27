@@ -48,6 +48,7 @@ budgets.
   decomposition beneath it.
 - Click any semantic field to edit it directly.
 - Import or export semantic JSON; canvas positions are never exported.
+- The committed tree and undo/redo history save automatically in this browser.
 - Use the Activity panel to inspect model mutations, rejected edits,
   validation, retries, cancellation, and rollback.
 

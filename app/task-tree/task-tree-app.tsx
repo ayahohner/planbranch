@@ -11,6 +11,11 @@ import {
 } from "../../packages/domain/src";
 import { ActivityPanel } from "./activity-panel";
 import { ConfirmDialog } from "./confirm-dialog";
+import {
+  parsePersistedWorkspace,
+  serializeWorkspace,
+  WORKSPACE_STORAGE_KEY,
+} from "./persistence";
 import { useEditorStore } from "./store";
 import { TaskCanvas } from "./task-canvas";
 import { Toolbar } from "./toolbar";
@@ -34,6 +39,7 @@ export function TaskTreeApp() {
   const redo = useEditorStore((state) => state.redo);
   const newTree = useEditorStore((state) => state.newTree);
   const replaceTree = useEditorStore((state) => state.replaceTree);
+  const restoreWorkspace = useEditorStore((state) => state.restoreWorkspace);
   const setNotice = useEditorStore((state) => state.setNotice);
   const setActivityOpen = useEditorStore((state) => state.setActivityOpen);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
@@ -43,6 +49,58 @@ export function TaskTreeApp() {
     refreshHealth,
     modelHealth,
   } = useRuns();
+
+  useEffect(() => {
+    try {
+      const source = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
+      if (source) {
+        const saved = parsePersistedWorkspace(source);
+        restoreWorkspace(saved.tree, saved.history, saved.future);
+      }
+    } catch {
+      try {
+        window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+      } catch {
+        // Storage can be unavailable in restricted browser contexts.
+      }
+      setNotice({
+        kind: "error",
+        message:
+          "The saved workspace was invalid and could not be restored.",
+      });
+    }
+
+    const persist = (state: ReturnType<typeof useEditorStore.getState>) => {
+      window.localStorage.setItem(
+        WORKSPACE_STORAGE_KEY,
+        serializeWorkspace({
+          tree: state.tree,
+          history: state.history.slice(-500),
+          future: state.future.slice(0, 500),
+        }),
+      );
+    };
+    persist(useEditorStore.getState());
+
+    return useEditorStore.subscribe((state, previous) => {
+      if (
+        state.tree === previous.tree &&
+        state.history === previous.history &&
+        state.future === previous.future
+      ) {
+        return;
+      }
+      try {
+        persist(state);
+      } catch {
+        setNotice({
+          kind: "error",
+          message:
+            "The workspace changed, but browser storage could not be updated.",
+        });
+      }
+    });
+  }, [restoreWorkspace, setNotice]);
 
   useEffect(() => {
     if (!notice) return;
@@ -110,9 +168,7 @@ export function TaskTreeApp() {
         <section className="canvas-shell" aria-label="Task Tree canvas">
           <div className="canvas-context">
             <span>Ordered decomposition</span>
-            <strong>
-              {countTasks((activeRun?.overlayTree ?? tree).root)} Tasks
-            </strong>
+            <strong>{taskCountLabel(activeRun?.overlayTree ?? tree)}</strong>
           </div>
           <TaskCanvas
             changedFields={activeRun?.changedFields}
@@ -188,6 +244,11 @@ export function TaskTreeApp() {
       </main>
     </Tooltip.Provider>
   );
+}
+
+function taskCountLabel(tree: TaskTree): string {
+  const count = countTasks(tree.root);
+  return `${count} ${count === 1 ? "Task" : "Tasks"}`;
 }
 
 function countTasks(task: TaskTree["root"]): number {

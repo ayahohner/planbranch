@@ -55,7 +55,15 @@ export class OllamaModelClient implements ModelClient {
       tools: request.tools as Tool[] | undefined,
       stream: true,
     });
-    const abort = () => stream.abort();
+    const abort = () => {
+      queueMicrotask(() => {
+        try {
+          stream.abort();
+        } catch {
+          // The stream may already have ended between cancellation and abort.
+        }
+      });
+    };
     signal.addEventListener("abort", abort, { once: true });
     try {
       for await (const chunk of stream) {
@@ -79,7 +87,15 @@ export class OllamaModelClient implements ModelClient {
     if (signal.aborted) {
       throw new DOMException("The Run was cancelled.", "AbortError");
     }
-    const abort = () => this.client.abort();
+    const abort = () => {
+      queueMicrotask(() => {
+        try {
+          this.client.abort();
+        } catch {
+          // The request may already have ended between cancellation and abort.
+        }
+      });
+    };
     signal.addEventListener("abort", abort, { once: true });
     try {
       const response = await this.client.chat({

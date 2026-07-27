@@ -30,6 +30,7 @@ export function useRuns() {
   const modelHealth = useEditorStore((state) => state.modelHealth);
   const beginRun = useEditorStore((state) => state.beginRun);
   const applyRunEvent = useEditorStore((state) => state.applyRunEvent);
+  const cancelActiveRun = useEditorStore((state) => state.cancelActiveRun);
   const setModelHealth = useEditorStore((state) => state.setModelHealth);
   const setNotice = useEditorStore((state) => state.setNotice);
   const setActivityOpen = useEditorStore((state) => state.setActivityOpen);
@@ -155,14 +156,30 @@ export function useRuns() {
   const cancelRun = useCallback(async () => {
     if (!activeRun) return;
     try {
-      await fetch(`${API_BASE}/runs/${activeRun.id}`, { method: "DELETE" });
-    } catch {
+      const response = await fetch(`${API_BASE}/runs/${activeRun.id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok && response.status !== 404) {
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(
+          body?.error ?? `Cancellation returned ${response.status}.`,
+        );
+      }
+      sourceRef.current?.close();
+      sourceRef.current = null;
+      cancelActiveRun();
+    } catch (error) {
       setNotice({
         kind: "error",
-        message: "The cancellation request could not reach the local service.",
+        message:
+          error instanceof Error
+            ? `Cancellation failed: ${error.message}`
+            : "The cancellation request could not reach the local service.",
       });
     }
-  }, [activeRun, setNotice]);
+  }, [activeRun, cancelActiveRun, setNotice]);
 
   return {
     startRun,

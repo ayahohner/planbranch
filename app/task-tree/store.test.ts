@@ -125,6 +125,29 @@ describe("editor history", () => {
     expect(useEditorStore.getState().tree.root.children).toEqual([]);
   });
 
+  it("rolls back an active Run immediately after cancellation is accepted", () => {
+    const store = useEditorStore.getState();
+    store.beginRun(runId, "populate", rootId);
+    store.applyRunEvent(
+      createRunEvent(runId, 1, 1, "task.revised", {
+        taskId: rootId,
+        patch: { goals: ["Draft Goal"] },
+      }),
+    );
+
+    store.cancelActiveRun();
+
+    expect(useEditorStore.getState().activeRun).toBeNull();
+    expect(useEditorStore.getState().tree.root.goals).toEqual([
+      "Define the desired outcome",
+    ]);
+    expect(useEditorStore.getState().history).toHaveLength(0);
+    expect(useEditorStore.getState().runSummary?.state).toBe("cancelled");
+    expect(useEditorStore.getState().notice?.message).toContain(
+      "In-progress edits were undone",
+    );
+  });
+
   it("commits inline edits and undoes or redoes them transactionally", () => {
     useEditorStore.getState().reviseTask(rootId, {
       title: "Launch a Marketing Website",
@@ -154,5 +177,37 @@ describe("editor history", () => {
       });
     expect(useEditorStore.getState().history).toEqual([]);
     expect(useEditorStore.getState().future).toEqual([]);
+  });
+
+  it("restores a saved workspace without restoring an active Run", () => {
+    const saved = createEmptyTree(rootId);
+    saved.root.title = "Restored Brief";
+    const history = [
+      {
+        label: "Edit Task title",
+        patches: [],
+        inversePatches: [],
+      },
+    ];
+    useEditorStore.setState({
+      activeRun: {
+        id: runId,
+        action: "decompose",
+        targetTaskId: rootId,
+        baseTree: createEmptyTree(rootId),
+        overlayTree: createEmptyTree(rootId),
+        attempt: 1,
+        maxAttempts: 3,
+        newTaskIds: [],
+        changedFields: {},
+        ghostBranches: [],
+      },
+    });
+
+    useEditorStore.getState().restoreWorkspace(saved, history, []);
+
+    expect(useEditorStore.getState().tree.root.title).toBe("Restored Brief");
+    expect(useEditorStore.getState().history).toEqual(history);
+    expect(useEditorStore.getState().activeRun).toBeNull();
   });
 });
