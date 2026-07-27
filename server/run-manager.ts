@@ -1,4 +1,3 @@
-import type { Message, ToolCall } from "ollama";
 import { z } from "zod";
 import {
   addSubtask,
@@ -29,7 +28,11 @@ import {
   type ValidationIssue,
 } from "../packages/domain/src";
 import type { ServerConfig } from "./config";
-import type { ModelClient } from "./model";
+import type {
+  Message,
+  ModelClient,
+  ToolCall,
+} from "./model";
 import {
   buildActionPrompt,
   buildSemanticAuditPrompt,
@@ -299,7 +302,9 @@ export class RunManager {
     run.emit("run.started", {
       action: request.action,
       targetTaskId: request.targetTaskId,
-      model: this.config.ollamaModel,
+      model: this.config.modelName,
+      runtime: this.config.modelRuntime,
+      provider: this.config.modelProvider,
     });
     void this.execute(run);
     return run.snapshot();
@@ -445,42 +450,22 @@ export class RunManager {
       },
     ];
     const tools = [...toolsByAction[context.action]];
-
-    for (let turn = 0; turn < this.config.maxTurns; turn += 1) {
-      const assistantContent: string[] = [];
-      const toolCalls: ToolCall[] = [];
-      for await (const chunk of this.model.streamChat(
-        {
-          model: this.config.ollamaModel,
-          messages,
-          tools,
-          think: "medium",
-          options: {
-            num_ctx: this.config.ollamaContext,
-            temperature: 1,
-            top_p: 0.95,
-            top_k: 64,
-          },
-        },
-        run.abortController.signal,
-      )) {
-        if (chunk.content) assistantContent.push(chunk.content);
-        toolCalls.push(...chunk.toolCalls);
-      }
-
-      messages.push({
-        role: "assistant",
-        content: assistantContent.join(""),
-        tool_calls: toolCalls,
-      });
-
-      if (toolCalls.length === 0) {
-        throw new AttemptFailure(
-          "The model stopped before calling finish_run.",
-        );
-      }
-
-      for (const call of toolCalls) {
+    let toolCallCount = 0;
+    const response = await this.model.runChat(
+      {
+        model: this.config.modelName,
+        messages,
+        tools,
+        reasoningEffort: this.config.modelReasoningEffort,
+      },
+      run.abortController.signal,
+      (call) => {
+        toolCallCount += 1;
+        if (toolCallCount > this.config.maxToolCalls) {
+          throw new AttemptFailure(
+            "The model exceeded the Run tool-call budget.",
+          );
+        }
         let result: Record<string, unknown>;
         try {
           result = this.applyTool(context, call);
@@ -501,21 +486,21 @@ export class RunManager {
             );
           }
         }
+        return result;
+      },
+    );
 
-        messages.push({
-          role: "tool",
-          tool_name: call.function.name,
-          content: JSON.stringify(result),
-        });
-        if (context.finished) break;
-      }
-
-      if (context.finished) {
-        return this.validateAttempt(context);
-      }
+    if (response.toolCalls.length === 0) {
+      throw new AttemptFailure(
+        "The model stopped before calling a Task Tree tool.",
+      );
     }
-
-    throw new AttemptFailure("The model exceeded the Run turn budget.");
+    if (!context.finished) {
+      throw new AttemptFailure(
+        "The model stopped before calling finish_run.",
+      );
+    }
+    return this.validateAttempt(context);
   }
 
   private assertWritable(context: AttemptContext, taskId: string) {
@@ -735,7 +720,7 @@ export class RunManager {
     });
     const response = await this.model.completeChat(
       {
-        model: this.config.ollamaModel,
+        model: this.config.modelName,
         messages: [
           {
             role: "system",
@@ -753,11 +738,7 @@ export class RunManager {
           },
         ],
         format: semanticAuditFormat,
-        think: false,
-        options: {
-          num_ctx: this.config.ollamaContext,
-          temperature: 0,
-        },
+        reasoningEffort: this.config.modelReasoningEffort,
       },
       context.run.abortController.signal,
     );

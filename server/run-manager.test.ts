@@ -1,4 +1,3 @@
-import type { ToolCall } from "ollama";
 import { describe, expect, it } from "vitest";
 import {
   addSubtask,
@@ -11,6 +10,8 @@ import type {
   ModelClient,
   ModelHealth,
   ModelMessage,
+  ModelToolHandler,
+  ToolCall,
 } from "./model";
 import { RunManager } from "./run-manager";
 
@@ -22,11 +23,13 @@ const runId = "00000000-0000-4000-8000-000000000004";
 const config: ServerConfig = {
   host: "127.0.0.1",
   port: 8787,
-  ollamaHost: "http://127.0.0.1:11434",
-  ollamaModel: "gemma4:26b-mlx",
-  ollamaContext: 32_768,
+  modelRuntime: "codex-app-server",
+  modelCommand: "codex",
+  modelProvider: "OpenAI",
+  modelName: "gpt-5.3-codex-spark",
+  modelReasoningEffort: "xhigh",
   maxAttempts: 3,
-  maxTurns: 10,
+  maxToolCalls: 10,
   maxRejectedTools: 3,
 };
 
@@ -43,11 +46,18 @@ class FakeModel implements ModelClient {
     private readonly completions: ModelMessage[] = [],
   ) {}
 
-  async *streamChat(): AsyncIterable<ModelMessage> {
+  async runChat(
+    _request: unknown,
+    _signal: AbortSignal,
+    onToolCall?: ModelToolHandler,
+  ): Promise<ModelMessage> {
     const next = this.streams.shift();
     if (!next) throw new Error("Missing fake stream response.");
     if (next instanceof Error) throw next;
-    yield next;
+    for (const call of next.toolCalls) {
+      await onToolCall?.(call);
+    }
+    return next;
   }
 
   async completeChat(): Promise<ModelMessage> {
@@ -59,8 +69,11 @@ class FakeModel implements ModelClient {
   async health(): Promise<ModelHealth> {
     return {
       connected: true,
+      authenticated: true,
+      runtime: "Fake",
+      provider: "Test",
       version: "test",
-      installedModels: [config.ollamaModel],
+      availableModels: [config.modelName],
     };
   }
 }

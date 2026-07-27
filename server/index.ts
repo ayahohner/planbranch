@@ -1,11 +1,16 @@
 import { buildApp } from "./app";
 import { loadServerConfig } from "./config";
-import { OllamaModelClient } from "./model";
+import { CodexAppServerClient } from "./model";
 
 const config = loadServerConfig();
+if (config.modelRuntime !== "codex-app-server") {
+  throw new Error(
+    `Unsupported MODEL_RUNTIME "${config.modelRuntime}". This build supports codex-app-server.`,
+  );
+}
 const app = await buildApp({
   config,
-  model: new OllamaModelClient(config.ollamaHost),
+  model: new CodexAppServerClient(config.modelCommand),
 });
 
 try {

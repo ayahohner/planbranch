@@ -36,28 +36,26 @@ export async function buildApp({
 
   app.get("/api/health", async () => {
     const health = await model.health();
+    const available = health.availableModels.includes(config.modelName);
     return {
-      ok:
-        health.connected &&
-        health.installedModels.some(
-          (name) =>
-            name === config.ollamaModel ||
-            name.startsWith(`${config.ollamaModel}:`),
-        ),
-      ollama: {
+      ok: health.connected && health.authenticated && available,
+      runtime: {
+        id: config.modelRuntime,
+        name: health.runtime,
         connected: health.connected,
         version: health.version,
         error: health.error,
       },
-      model: {
-        name: config.ollamaModel,
-        installed: health.installedModels.some(
-          (name) =>
-            name === config.ollamaModel ||
-            name.startsWith(`${config.ollamaModel}:`),
-        ),
+      provider: {
+        name: health.provider || config.modelProvider,
+        authenticated: health.authenticated,
+        authentication: health.authentication,
       },
-      context: config.ollamaContext,
+      model: {
+        name: config.modelName,
+        available,
+        reasoningEffort: config.modelReasoningEffort,
+      },
     };
   });
 

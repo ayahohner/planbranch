@@ -1,11 +1,13 @@
 export interface ServerConfig {
   host: string;
   port: number;
-  ollamaHost: string;
-  ollamaModel: string;
-  ollamaContext: number;
+  modelRuntime: string;
+  modelCommand: string;
+  modelProvider: string;
+  modelName: string;
+  modelReasoningEffort: string;
   maxAttempts: number;
-  maxTurns: number;
+  maxToolCalls: number;
   maxRejectedTools: number;
 }
 
@@ -20,11 +22,14 @@ export function loadServerConfig(
   return {
     host: environment.SERVER_HOST ?? "127.0.0.1",
     port: positiveInteger(environment.SERVER_PORT, 8787),
-    ollamaHost: environment.OLLAMA_HOST ?? "http://127.0.0.1:11434",
-    ollamaModel: environment.OLLAMA_MODEL ?? "gemma4:26b-mlx",
-    ollamaContext: positiveInteger(environment.OLLAMA_NUM_CTX, 32_768),
+    modelRuntime: environment.MODEL_RUNTIME ?? "codex-app-server",
+    modelCommand: environment.MODEL_COMMAND ?? "codex",
+    modelProvider: environment.MODEL_PROVIDER ?? "OpenAI",
+    modelName: environment.MODEL_NAME ?? "gpt-5.3-codex-spark",
+    modelReasoningEffort:
+      environment.MODEL_REASONING_EFFORT ?? "xhigh",
     maxAttempts: positiveInteger(environment.RUN_MAX_ATTEMPTS, 3),
-    maxTurns: positiveInteger(environment.RUN_MAX_TURNS, 80),
+    maxToolCalls: positiveInteger(environment.RUN_MAX_TOOL_CALLS, 80),
     maxRejectedTools: positiveInteger(environment.RUN_MAX_REJECTED_TOOLS, 3),
   };
 }

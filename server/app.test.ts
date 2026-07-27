@@ -11,16 +11,18 @@ import type {
 const config: ServerConfig = {
   host: "127.0.0.1",
   port: 8787,
-  ollamaHost: "http://127.0.0.1:11434",
-  ollamaModel: "gemma4:26b-mlx",
-  ollamaContext: 32_768,
+  modelRuntime: "codex-app-server",
+  modelCommand: "codex",
+  modelProvider: "OpenAI",
+  modelName: "gpt-5.3-codex-spark",
+  modelReasoningEffort: "xhigh",
   maxAttempts: 3,
-  maxTurns: 10,
+  maxToolCalls: 10,
   maxRejectedTools: 3,
 };
 
 class IdleModel implements ModelClient {
-  async *streamChat(): AsyncIterable<ModelMessage> {
+  async runChat(): Promise<ModelMessage> {
     throw new Error("Not used.");
   }
 
@@ -31,13 +33,45 @@ class IdleModel implements ModelClient {
   async health(): Promise<ModelHealth> {
     return {
       connected: true,
+      authenticated: true,
+      runtime: "Fake",
+      provider: "Test",
       version: "test",
-      installedModels: [config.ollamaModel],
+      availableModels: [config.modelName],
     };
   }
 }
 
 describe("model service HTTP policy", () => {
+  it("reports provider-neutral runtime and model health", async () => {
+    const app = await buildApp({ config, model: new IdleModel() });
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/health",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      ok: true,
+      runtime: {
+        id: "codex-app-server",
+        name: "Fake",
+        connected: true,
+        version: "test",
+      },
+      provider: {
+        name: "Test",
+        authenticated: true,
+      },
+      model: {
+        name: "gpt-5.3-codex-spark",
+        available: true,
+        reasoningEffort: "xhigh",
+      },
+    });
+    await app.close();
+  });
+
   it("allows browser DELETE requests used to cancel Runs", async () => {
     const app = await buildApp({ config, model: new IdleModel() });
     const response = await app.inject({
