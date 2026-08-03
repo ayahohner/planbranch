@@ -248,6 +248,9 @@ Run feedback is an overlay rather than another semantic color:
 - The model may mutate only the target and descendants created during the Run.
 - Existing ancestors, siblings, and unrelated branches are immutable.
 - The model creates ordered children, revises their fields, and declares Operators for Primitive leaves.
+- Before adding children, the model must identify at least two independently meaningful ordered stages with a real Artifact handoff. A bounded transformation with no such handoff is Primitive.
+- A Run may create at most 12 Tasks and place new Tasks at most two levels below its selected target by default. Both limits are configurable runtime safeguards.
+- Prefer a deterministic Operator when explicit rules or a conventional tool can fully determine the output. Use an LLM Operator only for bounded semantic or creative judgment.
 - Unresolved leaves are allowed when the Run reaches its budget or the model cannot defend a direct Operator.
 - Decomposing an existing Primitive Task clears its Operator within the draft transaction.
 
@@ -325,7 +328,7 @@ Default host:
 Default model:
 
 ```text
-gpt-5.3-codex-spark
+gpt-5.6-terra
 ```
 
 Default configuration:
@@ -334,8 +337,8 @@ Default configuration:
 MODEL_RUNTIME=codex-app-server
 MODEL_COMMAND=codex
 MODEL_PROVIDER=OpenAI
-MODEL_NAME=gpt-5.3-codex-spark
-MODEL_REASONING_EFFORT=xhigh
+MODEL_NAME=gpt-5.6-terra
+MODEL_REASONING_EFFORT=medium
 MODEL_AUTH_MODE=chatgpt
 ```
 
@@ -772,7 +775,7 @@ Use a deterministic fake model runtime to test:
 
 - Verify Codex app-server reuses the ChatGPT-authenticated CLI session.
 - Verify the health endpoint rejects API-key login when `MODEL_AUTH_MODE=chatgpt`.
-- Verify `gpt-5.3-codex-spark` is available and accepts `xhigh` effort.
+- Verify `gpt-5.6-terra` is available and accepts `medium` effort.
 - Record end-to-end latency for representative Populate, Decompose, Optimize, and Collapse Runs.
 
 ## 16. Acceptance Criteria
@@ -793,7 +796,7 @@ The prototype is complete when:
 12. A failed Run leaves the committed tree and undo history unchanged.
 13. Undo and redo work for user edits and successful model Runs.
 14. JSON export/import round-trips all semantic data and no layout data.
-15. The app uses `gpt-5.3-codex-spark` through the ChatGPT-authenticated Codex app-server by default, without API credits.
+15. The app uses `gpt-5.6-terra` at `medium` effort through the ChatGPT-authenticated Codex app-server by default, without API credits.
 16. No described Operator is executed.
 
 ## 17. Recommended Implementation Order

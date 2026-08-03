@@ -33,6 +33,8 @@ const config: ServerConfig = {
   maxAttempts: 3,
   maxToolCalls: 10,
   maxRejectedTools: 3,
+  maxNewTasks: 12,
+  maxDecompositionDepth: 2,
 };
 
 function toolCall(
@@ -339,7 +341,7 @@ describe("RunManager", () => {
     expect(JSON.stringify(finished.events)).toContain("MISSING_OPERATOR");
   });
 
-  it("commits a complete subtask built through field-by-field edits", async () => {
+  it("commits complete sibling Tasks built through field-by-field edits", async () => {
     const complete: ModelMessage = {
       content: "",
       toolCalls: [
@@ -348,32 +350,59 @@ describe("RunManager", () => {
           title: "Draft Page",
         }),
         toolCall("revise_task", {
-          task_id: runId,
+          task_id: parentId,
           description: "Draft the page from the supplied brief.",
         }),
         toolCall("revise_task", {
-          task_id: runId,
+          task_id: parentId,
           inputs: ["Page Brief"],
         }),
         toolCall("revise_task", {
-          task_id: runId,
+          task_id: parentId,
           outputs: ["Page Draft"],
         }),
         toolCall("declare_operator", {
-          task_id: runId,
+          task_id: parentId,
           executor: "llm",
           operator: "draft-page",
         }),
         toolCall("declare_operator", {
-          task_id: runId,
+          task_id: parentId,
           executor: "llm",
           operator: "draft-page",
+        }),
+        toolCall("add_subtask", {
+          parent_id: rootId,
+          title: "Publish Page",
+        }),
+        toolCall("revise_task", {
+          task_id: childId,
+          description: "Publish the approved page through the site tooling.",
+        }),
+        toolCall("revise_task", {
+          task_id: childId,
+          inputs: ["Page Draft"],
+        }),
+        toolCall("revise_task", {
+          task_id: childId,
+          outputs: ["Published Page"],
+        }),
+        toolCall("declare_operator", {
+          task_id: childId,
+          executor: "deterministic",
+          operator: "publish-page",
         }),
         toolCall("finish_run"),
       ],
     };
     const model = new FakeModel([complete], [validAudit]);
-    const manager = new RunManager(model, config, () => runId);
+    const ids = [runId, parentId, childId];
+    let idIndex = 0;
+    const manager = new RunManager(
+      model,
+      { ...config, maxToolCalls: 20 },
+      () => ids[idIndex++] ?? childId,
+    );
     const started = manager.start({
       action: "decompose",
       tree: createEmptyTree(rootId),
@@ -397,7 +426,140 @@ describe("RunManager", () => {
     });
     expect(
       finished.events.filter((event) => event.type === "operator.declared"),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
+  });
+
+  it("rejects new Tasks beyond both depth and task-count limits", async () => {
+    const bounded: ModelMessage = {
+      content: "",
+      toolCalls: [
+        toolCall("add_subtask", {
+          parent_id: rootId,
+          title: "Prepare Data",
+        }),
+        toolCall("revise_task", {
+          task_id: parentId,
+          description: "Prepare the source data with explicit normalization rules.",
+        }),
+        toolCall("revise_task", {
+          task_id: parentId,
+          inputs: ["Source Data"],
+        }),
+        toolCall("revise_task", {
+          task_id: parentId,
+          outputs: ["Prepared Data"],
+        }),
+        toolCall("declare_operator", {
+          task_id: parentId,
+          executor: "deterministic",
+          operator: "normalize-data",
+        }),
+        toolCall("add_subtask", {
+          parent_id: parentId,
+          title: "Needless Inner Step",
+        }),
+        toolCall("add_subtask", {
+          parent_id: rootId,
+          title: "Publish Data",
+        }),
+        toolCall("revise_task", {
+          task_id: childId,
+          description: "Publish the prepared data through the configured destination.",
+        }),
+        toolCall("revise_task", {
+          task_id: childId,
+          inputs: ["Prepared Data"],
+        }),
+        toolCall("revise_task", {
+          task_id: childId,
+          outputs: ["Published Data"],
+        }),
+        toolCall("declare_operator", {
+          task_id: childId,
+          executor: "deterministic",
+          operator: "publish-data",
+        }),
+        toolCall("add_subtask", {
+          parent_id: rootId,
+          title: "Excess Task",
+        }),
+        toolCall("finish_run"),
+      ],
+    };
+    const model = new FakeModel([bounded], [validAudit]);
+    const ids = [runId, parentId, childId];
+    let idIndex = 0;
+    const manager = new RunManager(
+      model,
+      {
+        ...config,
+        maxToolCalls: 20,
+        maxNewTasks: 2,
+        maxDecompositionDepth: 1,
+      },
+      () => ids[idIndex++] ?? childId,
+    );
+    const started = manager.start({
+      action: "decompose",
+      tree: createEmptyTree(rootId),
+      targetTaskId: rootId,
+    });
+    const finished = await manager.waitForRun(started.id);
+
+    expect(finished.state).toBe("completed");
+    const rejections = finished.events
+      .filter((event) => event.type === "tool.rejected")
+      .map((event) => JSON.stringify(event.payload));
+    expect(rejections).toHaveLength(2);
+    expect(rejections[0]).toContain("at most 1 levels");
+    expect(rejections[1]).toContain("at most 2 Tasks");
+  });
+
+  it("rejects a redundant one-child decomposition", async () => {
+    const unary: ModelMessage = {
+      content: "",
+      toolCalls: [
+        toolCall("add_subtask", {
+          parent_id: rootId,
+          title: "Only Stage",
+        }),
+        toolCall("revise_task", {
+          task_id: parentId,
+          description: "Perform the only independently meaningful stage.",
+        }),
+        toolCall("revise_task", {
+          task_id: parentId,
+          inputs: ["Source Data"],
+        }),
+        toolCall("revise_task", {
+          task_id: parentId,
+          outputs: ["Result Data"],
+        }),
+        toolCall("declare_operator", {
+          task_id: parentId,
+          executor: "deterministic",
+          operator: "transform-data",
+        }),
+        toolCall("finish_run"),
+      ],
+    };
+    const model = new FakeModel([unary, unary, unary]);
+    const manager = new RunManager(
+      model,
+      config,
+      () => (model.chatRequests.length === 0 ? runId : parentId),
+    );
+    const started = manager.start({
+      action: "decompose",
+      tree: createEmptyTree(rootId),
+      targetTaskId: rootId,
+    });
+    const finished = await manager.waitForRun(started.id);
+
+    expect(finished.state).toBe("failed");
+    expect(JSON.stringify(finished.events)).toContain(
+      "REDUNDANT_SINGLE_CHILD_DECOMPOSITION",
+    );
   });
 
   it("retries from the original snapshot after a generation failure", async () => {

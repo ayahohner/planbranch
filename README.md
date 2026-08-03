@@ -5,7 +5,7 @@ model runtime to decompose complex work into a strictly ordered Task Tree.
 Model edits materialize while a Run is in progress, validation and retries
 remain visible, and only successful Runs enter undo history.
 
-The default runtime is Codex app-server with `gpt-5.6-sol` at `xhigh` reasoning
+The default runtime is the balanced `gpt-5.6-terra` model at `medium` reasoning
 effort. On load, the Activity panel asks Codex for the models available to the
 signed-in account and the reasoning efforts each model supports. It reuses the
 local Codex CLI's ChatGPT login, so Runs use the Codex subscription rather than
@@ -60,6 +60,9 @@ provider-specific UI changes.
 - The committed tree and undo/redo history save automatically in this browser.
 - Choose the model and supported reasoning effort from the Activity panel;
   that preference also saves in this browser.
+- Each Run may create at most 12 Tasks and descend at most two levels below its
+  target. Direct bounded transformations stop at an Operator instead of being
+  decomposed into implementation trivia.
 - Use the Activity panel to inspect model mutations, rejected edits,
   validation, retries, cancellation, and rollback.
 

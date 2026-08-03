@@ -21,6 +21,8 @@ const config: ServerConfig = {
   maxAttempts: 3,
   maxToolCalls: 10,
   maxRejectedTools: 3,
+  maxNewTasks: 12,
+  maxDecompositionDepth: 2,
 };
 
 const models: ModelOption[] = [

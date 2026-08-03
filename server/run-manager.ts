@@ -11,6 +11,7 @@ import {
   deriveTaskKind,
   findTask,
   finishRunInputSchema,
+  getAncestorPath,
   getSubtreeIds,
   moveSubtree,
   moveSubtreeInputSchema,
@@ -131,6 +132,7 @@ interface AttemptContext {
   targetTaskId: string;
   run: ManagedRun;
   rejectedTools: number;
+  createdTaskCount: number;
   finished: boolean;
   populatedFields: Set<"goals" | "inputs">;
   toolResultsByCallId: Map<string, Record<string, unknown>>;
@@ -173,6 +175,21 @@ function findTaskOrFail(tree: TaskTree, taskId: string): Task {
     throw new AttemptFailure(`Task ${taskId} does not exist.`);
   }
   return task;
+}
+
+function relativeDepth(
+  tree: TaskTree,
+  subtreeRootId: string,
+  taskId: string,
+): number {
+  const path = getAncestorPath(tree, taskId);
+  const rootIndex = path.findIndex((task) => task.id === subtreeRootId);
+  if (rootIndex < 0) {
+    throw new AttemptFailure(
+      `Task ${taskId} is outside the writable subtree.`,
+    );
+  }
+  return path.length - rootIndex - 1;
 }
 
 function assertFrozenTasksPreserved(
@@ -282,6 +299,14 @@ function decompositionCompletenessIssues(
       issues.push({
         code: "MISSING_OPERATOR",
         message: `${task.title} must have a direct Operator or be decomposed further.`,
+        path: task.id,
+        severity: "error",
+      });
+    }
+    if (task.children.length === 1) {
+      issues.push({
+        code: "REDUNDANT_SINGLE_CHILD_DECOMPOSITION",
+        message: `${task.title} has only one child. Keep it Primitive or decompose it into at least two independently meaningful stages.`,
         path: task.id,
         severity: "error",
       });
@@ -500,6 +525,7 @@ export class RunManager {
       targetTaskId: run.request.targetTaskId,
       run,
       rejectedTools: 0,
+      createdTaskCount: 0,
       finished: false,
       populatedFields: new Set(),
       toolResultsByCallId: new Map(),
@@ -534,6 +560,10 @@ export class RunManager {
           context.action,
           original,
           context.targetTaskId,
+          {
+            maxNewTasks: this.config.maxNewTasks,
+            maxDecompositionDepth: this.config.maxDecompositionDepth,
+          },
         ),
       },
     ];
@@ -641,6 +671,22 @@ export class RunManager {
       case "add_subtask": {
         const input = parseToolArguments(addSubtaskInputSchema, call);
         this.assertWritable(context, input.parent_id);
+        if (context.createdTaskCount >= this.config.maxNewTasks) {
+          throw new AttemptFailure(
+            `This Run may create at most ${this.config.maxNewTasks} Tasks. Stop adding Tasks and declare direct Operators on the remaining leaves.`,
+          );
+        }
+        const newTaskDepth =
+          relativeDepth(
+            context.draft,
+            context.targetTaskId,
+            input.parent_id,
+          ) + 1;
+        if (newTaskDepth > this.config.maxDecompositionDepth) {
+          throw new AttemptFailure(
+            `New Tasks may be at most ${this.config.maxDecompositionDepth} levels below the selected target. Stop decomposing Task ${input.parent_id} and declare a direct Operator instead.`,
+          );
+        }
         const result = addSubtask(
           context.draft,
           input.parent_id,
@@ -649,6 +695,7 @@ export class RunManager {
           this.idFactory(),
         );
         context.draft = result.tree;
+        context.createdTaskCount += 1;
         context.run.emit("task.added", {
           parentId: input.parent_id,
           afterSiblingId: input.after_sibling_id,

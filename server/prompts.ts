@@ -17,17 +17,27 @@ Ubiquitous language:
 
 Rules:
 1. Produce a strictly ordered tree. Do not create parallel, conditional, or alternative paths.
-2. A Task is not Primitive when its executor must first decide which additional tasks or structural stages are required.
-3. Bounded local judgment within a direct action is allowed.
-4. Prefer terms from the user's brief and established domain terminology.
-5. Do not introduce abstractions merely to organize the plan.
-6. Reuse existing Artifact Labels rather than inventing synonyms.
-7. Respect the writable scope. Everything else is read-only context.
-8. Mutate the tree only through the supplied tools.
-9. Work field-by-field so the user can watch meaningful progress.
-10. Call finish_run when the writable scope is coherent.`;
+2. Default to making a Task Primitive. Decompose it only when execution requires at least two independently meaningful ordered stages with a real Artifact handoff between them.
+3. Internal implementation steps, a checklist, or bounded local judgment do not justify more Tasks. Capture them inside one direct Operator.
+4. A Task is not Primitive when its executor must first decide which additional Tasks or structural stages are required.
+5. Prefer a deterministic Operator when explicit rules or a conventional tool fully determine the output. Use an llm Operator only for bounded semantic or creative judgment.
+6. Prefer terms from the user's brief and established domain terminology.
+7. Do not introduce abstractions merely to organize the plan.
+8. Reuse existing Artifact Labels rather than inventing synonyms.
+9. Respect the writable scope. Everything else is read-only context.
+10. Mutate the tree only through the supplied tools and work field-by-field.
+11. Call finish_run as soon as every leaf has a defensible direct Operator.`;
 
-function actionInstruction(action: RunAction, targetId: string): string {
+export interface PlanningBudgets {
+  maxNewTasks: number;
+  maxDecompositionDepth: number;
+}
+
+function actionInstruction(
+  action: RunAction,
+  targetId: string,
+  budgets: PlanningBudgets,
+): string {
   switch (action) {
     case "populate":
       return `Populate the Root Brief for Task ${targetId}.
@@ -39,6 +49,8 @@ Preserve useful existing entries, remove weak placeholders and synonyms, and do 
 Do not revise Title, Description, Outputs, or any other Task field. Do not change the tree structure or Operator.`;
     case "decompose":
       return `Decompose Task ${targetId} into a complete, strictly ordered subtree.
+Create no more than ${budgets.maxNewTasks} new Tasks and do not place a new Task more than ${budgets.maxDecompositionDepth} levels below the target. These are hard limits, not goals to fill.
+Before each add_subtask call, apply the Primitive test: if the work is one bounded transformation from its Inputs to Outputs and does not require two separately meaningful stages with an Artifact handoff, declare one Operator instead of adding children.
 Create siblings in chronological execution order. Omit after_sibling_id to append each new sibling, or use an accepted sibling ID when inserting deliberately.
 For every new Task:
 1. Call add_subtask with only parent_id, after_sibling_id when needed, and title.
@@ -49,6 +61,7 @@ Inputs belong on the Task that consumes them and outputs belong on the Task that
 Use identical Artifact Labels where an output flows into a later Task input. Capitalize every word in an Artifact Label, such as "Running Water" and "Clean Body".`;
     case "optimize":
       return `Optimize Task ${targetId} and its descendants. Preserve its overall intent, improve chronological ordering and decomposition quality, and do not mutate anything outside this subtree.
+Create no more than ${budgets.maxNewTasks} new Tasks and do not place a new Task more than ${budgets.maxDecompositionDepth} levels below the target. Collapse needless implementation-step decomposition, and apply the same Primitive test before adding any Task.
 Work one semantic field per revise_task call. Every descendant must finish with a non-empty description, at least one input and output Artifact Label, and every leaf must have a direct Operator.
 Inputs belong on the Task that consumes them and outputs on the Task that produces them. Reuse an identical Artifact Label across producer and consumer Tasks instead of aggregating descendant artifacts onto the optimization root.`;
     case "collapse":
@@ -60,6 +73,7 @@ export function buildActionPrompt(
   action: RunAction,
   tree: TaskTree,
   targetId: string,
+  budgets: PlanningBudgets,
 ): string {
   const target = findTask(tree, targetId)?.task;
   if (!target) {
@@ -71,7 +85,7 @@ export function buildActionPrompt(
     description: task.description,
   }));
 
-  return `${actionInstruction(action, targetId)}
+  return `${actionInstruction(action, targetId, budgets)}
 
 Root Goals:
 ${JSON.stringify(tree.root.goals, null, 2)}
@@ -103,6 +117,9 @@ export function buildSemanticAuditPrompt(
       : `- alignment with Root Goals;
 - ordered children plausibly cover each Compound parent;
 - Primitive Tasks are directly actionable without another planning stage;
+- every Compound Task has at least two independently meaningful stages with a real Artifact handoff;
+- bounded transformations and implementation details stop at a direct Operator rather than becoming extra Tasks;
+- deterministic Operators are used when explicit rules or a conventional tool can fully determine the output;
 - Artifact flow is coherent;
 - no unnecessary organizational abstractions were introduced;
 - frozen Tasks outside the target subtree did not change;

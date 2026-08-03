@@ -25,10 +25,10 @@ describe("editor history", () => {
       modelSelectionResolved: false,
       modelHealth: {
         status: "checking",
-        name: "gpt-5.3-codex-spark",
+        name: "gpt-5.6-terra",
         runtime: "Codex app-server",
         provider: "OpenAI",
-        reasoningEffort: "xhigh",
+        reasoningEffort: "medium",
       },
     });
   });

@@ -10,6 +10,8 @@ export interface ServerConfig {
   maxAttempts: number;
   maxToolCalls: number;
   maxRejectedTools: number;
+  maxNewTasks: number;
+  maxDecompositionDepth: number;
 }
 
 function positiveInteger(value: string | undefined, fallback: number): number {
@@ -26,12 +28,17 @@ export function loadServerConfig(
     modelRuntime: environment.MODEL_RUNTIME ?? "codex-app-server",
     modelCommand: environment.MODEL_COMMAND ?? "codex",
     modelProvider: environment.MODEL_PROVIDER ?? "OpenAI",
-    modelName: environment.MODEL_NAME ?? "gpt-5.6-sol",
+    modelName: environment.MODEL_NAME ?? "gpt-5.6-terra",
     modelReasoningEffort:
-      environment.MODEL_REASONING_EFFORT ?? "xhigh",
+      environment.MODEL_REASONING_EFFORT ?? "medium",
     modelAuthMode: environment.MODEL_AUTH_MODE ?? "chatgpt",
     maxAttempts: positiveInteger(environment.RUN_MAX_ATTEMPTS, 3),
     maxToolCalls: positiveInteger(environment.RUN_MAX_TOOL_CALLS, 200),
     maxRejectedTools: positiveInteger(environment.RUN_MAX_REJECTED_TOOLS, 3),
+    maxNewTasks: positiveInteger(environment.RUN_MAX_NEW_TASKS, 12),
+    maxDecompositionDepth: positiveInteger(
+      environment.RUN_MAX_DECOMPOSITION_DEPTH,
+      2,
+    ),
   };
 }

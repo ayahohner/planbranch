@@ -71,7 +71,7 @@ export const toolDefinitions: Record<ToolName, LlmToolDefinition> = {
     function: {
       name: "add_subtask",
       description:
-        "Create and immediately link one ordered Unresolved subtask. This tool accepts only parent_id, after_sibling_id, and title. After creation, use the returned task_id with separate revise_task calls for description, inputs, and outputs, then declare_operator for a direct leaf.",
+        "Create and immediately link one independently meaningful ordered stage. Do not use this for an internal implementation step, checklist item, or bounded transformation that should be one direct Operator. This tool accepts only parent_id, after_sibling_id, and title. After creation, use the returned task_id with separate revise_task calls for description, inputs, and outputs, then declare_operator for a direct leaf.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -133,7 +133,7 @@ export const toolDefinitions: Record<ToolName, LlmToolDefinition> = {
     function: {
       name: "declare_operator",
       description:
-        "Make a childless Task Primitive by declaring its Executor and direct kebab-case Operator.",
+        "Stop decomposing a childless Task by declaring its direct kebab-case Operator. Choose deterministic when explicit rules or a conventional tool fully determine the output; choose llm only for bounded semantic or creative judgment.",
       parameters: {
         type: "object",
         additionalProperties: false,
