@@ -19,6 +19,7 @@ import {
   reviseTask,
   type RunAction,
   type RunEvent,
+  type ModelOption,
   type Operator,
   type RevisableTaskFields,
   type Task,
@@ -97,6 +98,8 @@ interface EditorState {
   runLogs: RunLogEntry[];
   activityOpen: boolean;
   modelHealth: ModelHealthState;
+  modelOptions: ModelOption[];
+  modelSelectionResolved: boolean;
   commitTree: (nextTree: TaskTree, label: string) => void;
   reviseTask: (
     taskId: string,
@@ -127,6 +130,34 @@ interface EditorState {
   setActivityOpen: (open: boolean) => void;
   toggleActivityOpen: () => void;
   setModelHealth: (health: ModelHealthState) => void;
+  restoreModelSelection: (model: string, reasoningEffort: string) => void;
+  setModelCatalog: (
+    models: ModelOption[],
+    fallbackModel: string,
+    fallbackReasoningEffort?: string,
+  ) => void;
+  setSelectedModel: (model: string) => void;
+  setSelectedReasoningEffort: (reasoningEffort: string) => void;
+}
+
+function selectReasoningEffort(
+  model: ModelOption,
+  preferred?: string,
+): string | undefined {
+  const supported = model.supportedReasoningEfforts.map(
+    (option) => option.reasoningEffort,
+  );
+  if (supported.length === 0) {
+    return preferred ?? model.defaultReasoningEffort;
+  }
+  if (preferred && supported.includes(preferred)) return preferred;
+  if (
+    model.defaultReasoningEffort &&
+    supported.includes(model.defaultReasoningEffort)
+  ) {
+    return model.defaultReasoningEffort;
+  }
+  return supported[0];
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
@@ -138,9 +169,11 @@ export const useEditorStore = create<EditorState>((set) => ({
   runSummary: null,
   runLogs: [],
   activityOpen: false,
+  modelOptions: [],
+  modelSelectionResolved: false,
   modelHealth: {
     status: "checking",
-    name: "gpt-5.3-codex-spark",
+    name: "gpt-5.6-sol",
     runtime: "Codex app-server",
     provider: "OpenAI",
     reasoningEffort: "xhigh",
@@ -574,6 +607,75 @@ export const useEditorStore = create<EditorState>((set) => ({
   toggleActivityOpen: () =>
     set((state) => ({ activityOpen: !state.activityOpen })),
   setModelHealth: (modelHealth) => set({ modelHealth }),
+  restoreModelSelection: (name, reasoningEffort) =>
+    set((state) => ({
+      modelHealth: { ...state.modelHealth, name, reasoningEffort },
+      modelSelectionResolved: true,
+    })),
+  setModelCatalog: (modelOptions, fallbackModel, fallbackReasoningEffort) =>
+    set((state) => {
+      const selected =
+        (state.modelSelectionResolved
+          ? modelOptions.find(
+              (option) => option.model === state.modelHealth.name,
+            )
+          : undefined) ??
+        modelOptions.find((option) => option.model === fallbackModel) ??
+        modelOptions.find((option) => option.isDefault) ??
+        modelOptions[0];
+      if (!selected) return { modelOptions };
+      return {
+        modelOptions,
+        modelSelectionResolved: true,
+        modelHealth: {
+          ...state.modelHealth,
+          name: selected.model,
+          reasoningEffort: selectReasoningEffort(
+            selected,
+            state.modelSelectionResolved
+              ? state.modelHealth.reasoningEffort
+              : fallbackReasoningEffort,
+          ),
+        },
+      };
+    }),
+  setSelectedModel: (name) =>
+    set((state) => {
+      const selected = state.modelOptions.find(
+        (option) => option.model === name,
+      );
+      if (!selected) return state;
+      return {
+        modelSelectionResolved: true,
+        modelHealth: {
+          ...state.modelHealth,
+          name: selected.model,
+          reasoningEffort: selectReasoningEffort(
+            selected,
+            state.modelHealth.reasoningEffort,
+          ),
+        },
+      };
+    }),
+  setSelectedReasoningEffort: (reasoningEffort) =>
+    set((state) => {
+      const selected = state.modelOptions.find(
+        (option) => option.model === state.modelHealth.name,
+      );
+      if (
+        selected &&
+        selected.supportedReasoningEfforts.length > 0 &&
+        !selected.supportedReasoningEfforts.some(
+          (option) => option.reasoningEffort === reasoningEffort,
+        )
+      ) {
+        return state;
+      }
+      return {
+        modelSelectionResolved: true,
+        modelHealth: { ...state.modelHealth, reasoningEffort },
+      };
+    }),
 }));
 
 function addChangedField(

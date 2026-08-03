@@ -26,7 +26,7 @@ export function loadServerConfig(
     modelRuntime: environment.MODEL_RUNTIME ?? "codex-app-server",
     modelCommand: environment.MODEL_COMMAND ?? "codex",
     modelProvider: environment.MODEL_PROVIDER ?? "OpenAI",
-    modelName: environment.MODEL_NAME ?? "gpt-5.3-codex-spark",
+    modelName: environment.MODEL_NAME ?? "gpt-5.6-sol",
     modelReasoningEffort:
       environment.MODEL_REASONING_EFFORT ?? "xhigh",
     modelAuthMode: environment.MODEL_AUTH_MODE ?? "chatgpt",

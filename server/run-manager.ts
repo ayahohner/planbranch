@@ -389,7 +389,7 @@ export class RunManager {
     run.emit("run.started", {
       action: request.action,
       targetTaskId: request.targetTaskId,
-      model: this.config.modelName,
+      model: request.model ?? this.config.modelName,
       runtime: this.config.modelRuntime,
       provider: this.config.modelProvider,
     });
@@ -541,10 +541,11 @@ export class RunManager {
     let toolCallCount = 0;
     const response = await this.model.runChat(
       {
-        model: this.config.modelName,
+        model: run.request.model ?? this.config.modelName,
         messages,
         tools,
-        reasoningEffort: this.config.modelReasoningEffort,
+        reasoningEffort:
+          run.request.reasoningEffort ?? this.config.modelReasoningEffort,
       },
       run.abortController.signal,
       (call) => {
@@ -848,7 +849,7 @@ export class RunManager {
     });
     const response = await this.model.completeChat(
       {
-        model: this.config.modelName,
+        model: context.run.request.model ?? this.config.modelName,
         messages: [
           {
             role: "system",
@@ -866,7 +867,9 @@ export class RunManager {
           },
         ],
         format: semanticAuditFormat,
-        reasoningEffort: this.config.modelReasoningEffort,
+        reasoningEffort:
+          context.run.request.reasoningEffort ??
+          this.config.modelReasoningEffort,
       },
       context.run.abortController.signal,
     );

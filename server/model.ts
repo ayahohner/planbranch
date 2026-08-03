@@ -1,6 +1,9 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { LlmToolDefinition } from "../packages/domain/src";
+import type {
+  LlmToolDefinition,
+  ModelOption,
+} from "../packages/domain/src";
 
 export interface ToolCall {
   id?: string;
@@ -39,6 +42,7 @@ export interface ModelHealth {
   authentication?: string;
   version?: string;
   availableModels: string[];
+  models: ModelOption[];
   error?: string;
 }
 
@@ -286,7 +290,20 @@ interface AccountReadResult {
 }
 
 interface ModelListResult {
-  data?: Array<{ model?: string }>;
+  data?: Array<{
+    id?: string;
+    model?: string;
+    displayName?: string;
+    description?: string;
+    hidden?: boolean;
+    defaultReasoningEffort?: string;
+    supportedReasoningEfforts?: Array<{
+      reasoningEffort?: string;
+      description?: string;
+    }>;
+    isDefault?: boolean;
+  }>;
+  nextCursor?: string | null;
 }
 
 function abortError(): DOMException {
@@ -546,15 +563,52 @@ export class CodexAppServerClient implements ModelClient {
     try {
       const started = await CodexConnection.start(this.command, this.cwd);
       connection = started.connection;
-      const [accountResult, modelResult] = await Promise.all([
+      const [accountResult, firstModelResult] = await Promise.all([
         connection.request("account/read", { refreshToken: false }),
         connection.request("model/list", {
           limit: 100,
-          includeHidden: true,
+          includeHidden: false,
         }),
       ]);
       const account = accountResult as AccountReadResult;
-      const models = modelResult as ModelListResult;
+      const modelResults = [firstModelResult as ModelListResult];
+      let cursor = modelResults[0].nextCursor;
+      while (cursor) {
+        const nextResult = (await connection.request("model/list", {
+          cursor,
+          limit: 100,
+          includeHidden: false,
+        })) as ModelListResult;
+        modelResults.push(nextResult);
+        cursor = nextResult.nextCursor;
+      }
+      const models = modelResults
+        .flatMap((result) => result.data ?? [])
+        .flatMap((entry): ModelOption[] => {
+          if (!entry.model) return [];
+          return [
+            {
+              id: entry.id ?? entry.model,
+              model: entry.model,
+              displayName: entry.displayName ?? entry.model,
+              description: entry.description,
+              hidden: entry.hidden ?? false,
+              defaultReasoningEffort: entry.defaultReasoningEffort,
+              supportedReasoningEfforts:
+                entry.supportedReasoningEfforts?.flatMap((effort) =>
+                  effort.reasoningEffort
+                    ? [
+                        {
+                          reasoningEffort: effort.reasoningEffort,
+                          description: effort.description,
+                        },
+                      ]
+                    : [],
+                ) ?? [],
+              isDefault: entry.isDefault ?? false,
+            },
+          ];
+        });
       const authenticated = Boolean(account.account);
       const authenticationMode =
         account.account?.type === "chatgpt"
@@ -581,10 +635,8 @@ export class CodexAppServerClient implements ModelClient {
         provider: "OpenAI",
         authentication,
         version: started.userAgent,
-        availableModels:
-          models.data
-            ?.map((model) => model.model)
-            .filter((model): model is string => Boolean(model)) ?? [],
+        availableModels: models.map((model) => model.model),
+        models,
         error: authenticated
           ? undefined
           : "Codex CLI is not signed in. Run: codex login",
@@ -596,6 +648,7 @@ export class CodexAppServerClient implements ModelClient {
         runtime: "Codex CLI",
         provider: "OpenAI",
         availableModels: [],
+        models: [],
         error:
           error instanceof Error
             ? error.message

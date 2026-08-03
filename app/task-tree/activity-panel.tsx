@@ -10,6 +10,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import type { ModelOption } from "../../packages/domain/src";
 import type {
   ModelHealthState,
   RunLogEntry,
@@ -34,8 +35,11 @@ export function ActivityPanel({
   summary,
   logs,
   model,
+  models,
   onCancel,
   onClose,
+  onModelChange,
+  onReasoningEffortChange,
   onRefreshModel,
 }: {
   open: boolean;
@@ -43,11 +47,20 @@ export function ActivityPanel({
   summary: RunSummary | null;
   logs: RunLogEntry[];
   model: ModelHealthState;
+  models: ModelOption[];
   onCancel: () => void;
   onClose: () => void;
+  onModelChange: (model: string) => void;
+  onReasoningEffortChange: (effort: string) => void;
   onRefreshModel: () => void;
 }) {
   if (!open) return null;
+
+  const selectedModel = models.find((option) => option.model === model.name);
+  const reasoningEfforts = selectedModel?.supportedReasoningEfforts ?? [];
+  const selectedEffort = reasoningEfforts.find(
+    (option) => option.reasoningEffort === model.reasoningEffort,
+  );
 
   const actionLabel =
     summary?.action === "populate"
@@ -115,6 +128,60 @@ export function ActivityPanel({
         >
           <RefreshCcw size={14} />
         </button>
+      </section>
+
+      <section className="model-settings-card" aria-label="Run model settings">
+        <label>
+          <span>Model</span>
+          <select
+            aria-label="Model"
+            disabled={active || models.length === 0}
+            onChange={(event) => onModelChange(event.target.value)}
+            value={model.name}
+          >
+            {models.length === 0 ? (
+              <option value={model.name}>{model.name}</option>
+            ) : (
+              models.map((option) => (
+                <option key={option.id} value={option.model}>
+                  {option.displayName}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+        <label>
+          <span>Reasoning effort</span>
+          <select
+            aria-label="Reasoning effort"
+            disabled={active || reasoningEfforts.length === 0}
+            onChange={(event) =>
+              onReasoningEffortChange(event.target.value)
+            }
+            value={model.reasoningEffort ?? ""}
+          >
+            {reasoningEfforts.length === 0 ? (
+              <option value={model.reasoningEffort ?? ""}>
+                {model.reasoningEffort ?? "Unavailable"}
+              </option>
+            ) : (
+              reasoningEfforts.map((option) => (
+                <option
+                  key={option.reasoningEffort}
+                  value={option.reasoningEffort}
+                >
+                  {option.reasoningEffort}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+        {selectedEffort?.description ?? selectedModel?.description ? (
+          <p>
+            {selectedEffort?.description ?? selectedModel?.description}
+          </p>
+        ) : null}
+        {active ? <small>Model settings are locked during a Run.</small> : null}
       </section>
 
       {summary ? (

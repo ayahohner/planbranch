@@ -2,6 +2,7 @@ import { z } from "zod";
 import { taskTreeSchema, type TaskTree } from "../../packages/domain/src";
 
 export const WORKSPACE_STORAGE_KEY = "task-tree.workspace.v1";
+export const MODEL_SELECTION_STORAGE_KEY = "planbranch.model-selection.v1";
 
 const patchSchema = z
   .object({
@@ -37,6 +38,16 @@ export interface PersistedWorkspace {
   future: PersistedHistoryEntry[];
 }
 
+const modelSelectionSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    model: z.string().trim().min(1).max(200),
+    reasoningEffort: z.string().trim().min(1).max(50),
+  })
+  .strict();
+
+export type PersistedModelSelection = z.infer<typeof modelSelectionSchema>;
+
 export function serializeWorkspace(
   workspace: Omit<PersistedWorkspace, "schemaVersion">,
 ): string {
@@ -48,4 +59,19 @@ export function serializeWorkspace(
 
 export function parsePersistedWorkspace(source: string): PersistedWorkspace {
   return persistedWorkspaceSchema.parse(JSON.parse(source));
+}
+
+export function serializeModelSelection(
+  selection: Omit<PersistedModelSelection, "schemaVersion">,
+): string {
+  return JSON.stringify({
+    schemaVersion: 1,
+    ...selection,
+  } satisfies PersistedModelSelection);
+}
+
+export function parsePersistedModelSelection(
+  source: string,
+): PersistedModelSelection {
+  return modelSelectionSchema.parse(JSON.parse(source));
 }

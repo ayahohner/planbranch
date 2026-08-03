@@ -35,6 +35,7 @@ export function TaskTreeApp() {
   const runSummary = useEditorStore((state) => state.runSummary);
   const runLogs = useEditorStore((state) => state.runLogs);
   const activityOpen = useEditorStore((state) => state.activityOpen);
+  const modelOptions = useEditorStore((state) => state.modelOptions);
   const undo = useEditorStore((state) => state.undo);
   const redo = useEditorStore((state) => state.redo);
   const newTree = useEditorStore((state) => state.newTree);
@@ -44,6 +45,10 @@ export function TaskTreeApp() {
   const setActivityOpen = useEditorStore((state) => state.setActivityOpen);
   const toggleActivityOpen = useEditorStore(
     (state) => state.toggleActivityOpen,
+  );
+  const setSelectedModel = useEditorStore((state) => state.setSelectedModel);
+  const setSelectedReasoningEffort = useEditorStore(
+    (state) => state.setSelectedReasoningEffort,
   );
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const {
@@ -195,8 +200,11 @@ export function TaskTreeApp() {
           active={Boolean(activeRun)}
           logs={runLogs}
           model={modelHealth}
+          models={modelOptions}
           onCancel={() => void cancelRun()}
           onClose={() => setActivityOpen(false)}
+          onModelChange={setSelectedModel}
+          onReasoningEffortChange={setSelectedReasoningEffort}
           onRefreshModel={() => void refreshHealth()}
           open={activityOpen}
           summary={runSummary}

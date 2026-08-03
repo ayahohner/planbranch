@@ -8,6 +8,7 @@ import {
 import type { ServerConfig } from "./config";
 import type {
   ModelClient,
+  ModelChatRequest,
   ModelHealth,
   ModelMessage,
   ModelToolHandler,
@@ -42,16 +43,20 @@ function toolCall(
 }
 
 class FakeModel implements ModelClient {
+  readonly chatRequests: ModelChatRequest[] = [];
+  readonly completionRequests: ModelChatRequest[] = [];
+
   constructor(
     private readonly streams: Array<ModelMessage | Error>,
     private readonly completions: ModelMessage[] = [],
   ) {}
 
   async runChat(
-    _request: unknown,
+    request: ModelChatRequest,
     _signal: AbortSignal,
     onToolCall?: ModelToolHandler,
   ): Promise<ModelMessage> {
+    this.chatRequests.push(request);
     const next = this.streams.shift();
     if (!next) throw new Error("Missing fake stream response.");
     if (next instanceof Error) throw next;
@@ -61,7 +66,10 @@ class FakeModel implements ModelClient {
     return next;
   }
 
-  async completeChat(): Promise<ModelMessage> {
+  async completeChat(
+    request: ModelChatRequest,
+  ): Promise<ModelMessage> {
+    this.completionRequests.push(request);
     const next = this.completions.shift();
     if (!next) throw new Error("Missing fake completion response.");
     return next;
@@ -76,6 +84,7 @@ class FakeModel implements ModelClient {
       provider: "Test",
       version: "test",
       availableModels: [config.modelName],
+      models: [],
     };
   }
 }
@@ -265,6 +274,32 @@ describe("RunManager", () => {
       executor: "llm",
       name: "create-landing-page",
     });
+  });
+
+  it("uses the model and reasoning effort selected for the Run", async () => {
+    const model = new FakeModel([successfulCollapseTools], [validAudit]);
+    const manager = new RunManager(model, config, () => runId);
+    const started = manager.start({
+      ...collapsedTreeRequest(),
+      model: "gpt-5.6-terra",
+      reasoningEffort: "medium",
+    });
+    const finished = await manager.waitForRun(started.id);
+
+    expect(finished.state).toBe("completed");
+    expect(model.chatRequests).toHaveLength(1);
+    expect(model.completionRequests).toHaveLength(1);
+    expect([...model.chatRequests, ...model.completionRequests]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          model: "gpt-5.6-terra",
+          reasoningEffort: "medium",
+        }),
+      ]),
+    );
+    expect(
+      finished.events.find((event) => event.type === "run.started")?.payload,
+    ).toMatchObject({ model: "gpt-5.6-terra" });
   });
 
   it("retries rather than committing incomplete generated subtasks", async () => {

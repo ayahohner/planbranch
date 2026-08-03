@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyTree } from "../../packages/domain/src";
 import {
+  parsePersistedModelSelection,
   parsePersistedWorkspace,
+  serializeModelSelection,
   serializeWorkspace,
 } from "./persistence";
 
@@ -72,5 +74,18 @@ describe("workspace persistence", () => {
         }),
       ),
     ).toThrow();
+  });
+
+  it("round-trips a model and reasoning preference", () => {
+    const source = serializeModelSelection({
+      model: "gpt-5.6-terra",
+      reasoningEffort: "high",
+    });
+
+    expect(parsePersistedModelSelection(source)).toEqual({
+      schemaVersion: 1,
+      model: "gpt-5.6-terra",
+      reasoningEffort: "high",
+    });
   });
 });

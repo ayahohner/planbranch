@@ -886,6 +886,64 @@ input.task-title {
   line-height: 1.35;
 }
 
+.model-settings-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 9px;
+  margin: 9px 12px 0;
+  padding: 11px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: white;
+}
+
+.model-settings-card label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.model-settings-card label > span {
+  color: var(--app-muted);
+  font-size: 9px;
+  font-weight: 690;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.model-settings-card select {
+  min-width: 0;
+  width: 100%;
+  height: 32px;
+  padding: 0 28px 0 9px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  color: var(--app-ink);
+  background: #fbfaf8;
+  font: inherit;
+  font-size: 11px;
+}
+
+.model-settings-card select:focus-visible {
+  border-color: var(--app-accent);
+  outline: 2px solid rgba(100, 89, 190, 0.18);
+  outline-offset: 1px;
+}
+
+.model-settings-card select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.model-settings-card p,
+.model-settings-card > small {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .run-progress-card {
   margin: 9px 12px 0;
   padding: 11px;

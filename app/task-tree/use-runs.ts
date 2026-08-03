@@ -3,9 +3,15 @@
 import { useCallback, useEffect, useRef } from "react";
 import {
   runEventTypes,
+  type ModelOption,
   type RunAction,
   type RunEvent,
 } from "../../packages/domain/src";
+import {
+  MODEL_SELECTION_STORAGE_KEY,
+  parsePersistedModelSelection,
+  serializeModelSelection,
+} from "./persistence";
 import { useEditorStore } from "./store";
 
 const API_BASE =
@@ -33,6 +39,7 @@ interface HealthResponse {
     available: boolean;
     reasoningEffort?: string;
   };
+  models: ModelOption[];
 }
 
 interface RunSnapshotResponse {
@@ -54,6 +61,10 @@ export function useRuns() {
   const cancelActiveRun = useEditorStore((state) => state.cancelActiveRun);
   const failActiveRun = useEditorStore((state) => state.failActiveRun);
   const setModelHealth = useEditorStore((state) => state.setModelHealth);
+  const setModelCatalog = useEditorStore((state) => state.setModelCatalog);
+  const restoreModelSelection = useEditorStore(
+    (state) => state.restoreModelSelection,
+  );
   const setNotice = useEditorStore((state) => state.setNotice);
   const setActivityOpen = useEditorStore((state) => state.setActivityOpen);
   const sourceRef = useRef<EventSource | null>(null);
@@ -61,64 +72,112 @@ export function useRuns() {
   const recoveringRef = useRef(false);
 
   const refreshHealth = useCallback(async () => {
+    const current = useEditorStore.getState().modelHealth;
     setModelHealth({
       status: "checking",
-      name: modelHealth.name,
-      runtime: modelHealth.runtime,
-      provider: modelHealth.provider,
-      reasoningEffort: modelHealth.reasoningEffort,
+      name: current.name,
+      runtime: current.runtime,
+      provider: current.provider,
+      reasoningEffort: current.reasoningEffort,
     });
     try {
       const response = await fetch(`${API_BASE}/health`);
       if (!response.ok) throw new Error(`Health check returned ${response.status}.`);
       const health = (await response.json()) as HealthResponse;
+      setModelCatalog(
+        health.models,
+        health.model.name,
+        health.model.reasoningEffort,
+      );
+      const selection = useEditorStore.getState().modelHealth;
+      const selectedAvailable = health.models.some(
+        (option) => option.model === selection.name,
+      );
+      const ready =
+        health.runtime.connected &&
+        health.provider.authenticated &&
+        selectedAvailable;
       setModelHealth({
-        status: health.ok
+        status: ready
           ? "ready"
           : health.runtime.connected
             ? "unavailable"
             : "offline",
-        name: health.model.name,
+        name: selection.name,
         runtime: health.runtime.name,
         provider: health.provider.name,
         authentication: health.provider.authentication,
-        reasoningEffort: health.model.reasoningEffort,
+        reasoningEffort: selection.reasoningEffort,
         version: health.runtime.version,
         error:
           health.runtime.error ??
           health.provider.error ??
           (!health.provider.authenticated
             ? `Sign in to ${health.runtime.name}.`
-            : !health.model.available
-              ? `${health.model.name} is unavailable for this account or provider.`
+            : !selectedAvailable
+              ? `${selection.name} is unavailable for this account or provider.`
               : undefined),
       });
     } catch (error) {
+      const fallback = useEditorStore.getState().modelHealth;
       setModelHealth({
         status: "offline",
-        name: modelHealth.name,
-        runtime: modelHealth.runtime,
-        provider: modelHealth.provider,
-        reasoningEffort: modelHealth.reasoningEffort,
+        name: fallback.name,
+        runtime: fallback.runtime,
+        provider: fallback.provider,
+        reasoningEffort: fallback.reasoningEffort,
         error:
           error instanceof Error
             ? error.message
             : "The configured model runtime is unavailable.",
       });
     }
-  }, [
-    modelHealth.name,
-    modelHealth.provider,
-    modelHealth.reasoningEffort,
-    modelHealth.runtime,
-    setModelHealth,
-  ]);
+  }, [setModelCatalog, setModelHealth]);
 
   useEffect(() => {
+    try {
+      const source = window.localStorage.getItem(MODEL_SELECTION_STORAGE_KEY);
+      if (source) {
+        const selection = parsePersistedModelSelection(source);
+        restoreModelSelection(selection.model, selection.reasoningEffort);
+      }
+    } catch {
+      try {
+        window.localStorage.removeItem(MODEL_SELECTION_STORAGE_KEY);
+      } catch {
+        // Storage can be unavailable in restricted browser contexts.
+      }
+    }
+
+    const unsubscribe = useEditorStore.subscribe((state, previous) => {
+      if (
+        state.modelHealth.name === previous.modelHealth.name &&
+        state.modelHealth.reasoningEffort ===
+          previous.modelHealth.reasoningEffort
+      ) {
+        return;
+      }
+      if (!state.modelHealth.reasoningEffort) return;
+      try {
+        window.localStorage.setItem(
+          MODEL_SELECTION_STORAGE_KEY,
+          serializeModelSelection({
+            model: state.modelHealth.name,
+            reasoningEffort: state.modelHealth.reasoningEffort,
+          }),
+        );
+      } catch {
+        // A blocked preference write should not interrupt planning work.
+      }
+    });
+
     void refreshHealth();
     const interval = window.setInterval(() => void refreshHealth(), 30_000);
-    return () => window.clearInterval(interval);
-  }, [refreshHealth]);
+    return () => {
+      unsubscribe();
+      window.clearInterval(interval);
+    };
+  }, [refreshHealth, restoreModelSelection]);
 
   useEffect(
     () => () => {
@@ -145,7 +204,13 @@ export function useRuns() {
         const response = await fetch(`${API_BASE}/runs`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action, tree, targetTaskId }),
+          body: JSON.stringify({
+            action,
+            tree,
+            targetTaskId,
+            model: modelHealth.name,
+            reasoningEffort: modelHealth.reasoningEffort,
+          }),
         });
         const body = (await response.json()) as {
           runId?: string;

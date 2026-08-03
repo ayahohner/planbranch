@@ -75,6 +75,24 @@ export interface StartRunRequest {
   action: RunAction;
   tree: TaskTree;
   targetTaskId: string;
+  model?: string;
+  reasoningEffort?: string;
+}
+
+export interface ReasoningEffortOption {
+  reasoningEffort: string;
+  description?: string;
+}
+
+export interface ModelOption {
+  id: string;
+  model: string;
+  displayName: string;
+  description?: string;
+  hidden: boolean;
+  defaultReasoningEffort?: string;
+  supportedReasoningEfforts: ReasoningEffortOption[];
+  isDefault: boolean;
 }
 
 export interface StartRunResponse {

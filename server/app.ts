@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
   taskTreeSchema,
+  type ModelOption,
   type StartRunRequest,
 } from "../packages/domain/src";
 import type { ServerConfig } from "./config";
@@ -14,6 +15,8 @@ const startRunSchema: z.ZodType<StartRunRequest> = z
     action: z.enum(["populate", "decompose", "optimize", "collapse"]),
     tree: taskTreeSchema,
     targetTaskId: z.uuid(),
+    model: z.string().trim().min(1).max(200).optional(),
+    reasoningEffort: z.string().trim().min(1).max(50).optional(),
   })
   .strict();
 const localWebOrigin = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
@@ -30,6 +33,7 @@ export async function buildApp({
   runManager = new RunManager(model, config),
 }: AppDependencies): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+  let latestModels: ModelOption[] = [];
   await app.register(cors, {
     origin: localWebOrigin,
     methods: ["GET", "HEAD", "POST", "DELETE", "OPTIONS"],
@@ -37,7 +41,20 @@ export async function buildApp({
 
   app.get("/api/health", async () => {
     const health = await model.health();
-    const available = health.availableModels.includes(config.modelName);
+    latestModels = health.models;
+    const selectedModel =
+      latestModels.find((option) => option.model === config.modelName) ??
+      latestModels.find((option) => option.isDefault) ??
+      latestModels[0];
+    const supportedEfforts = selectedModel?.supportedReasoningEfforts ?? [];
+    const selectedEffort = supportedEfforts.some(
+      (option) => option.reasoningEffort === config.modelReasoningEffort,
+    )
+      ? config.modelReasoningEffort
+      : selectedModel?.defaultReasoningEffort ??
+        supportedEfforts[0]?.reasoningEffort ??
+        config.modelReasoningEffort;
+    const available = Boolean(selectedModel);
     const authReady =
       health.authenticated &&
       (config.modelAuthMode === "any" ||
@@ -63,10 +80,11 @@ export async function buildApp({
             : undefined,
       },
       model: {
-        name: config.modelName,
+        name: selectedModel?.model ?? config.modelName,
         available,
-        reasoningEffort: config.modelReasoningEffort,
+        reasoningEffort: selectedEffort,
       },
+      models: latestModels,
     };
   });
 
@@ -79,7 +97,41 @@ export async function buildApp({
       });
     }
     try {
-      const run = runManager.start(parsed.data);
+      let runRequest = parsed.data;
+      if (parsed.data.model) {
+        if (latestModels.length === 0) {
+          latestModels = (await model.health()).models;
+        }
+        const selectedModel = latestModels.find(
+          (option) => option.model === parsed.data.model,
+        );
+        if (!selectedModel) {
+          return reply.status(400).send({
+            error: `Model ${parsed.data.model} is not available from the Codex runtime.`,
+          });
+        }
+        const supportedEfforts = selectedModel.supportedReasoningEfforts;
+        if (
+          parsed.data.reasoningEffort &&
+          supportedEfforts.length > 0 &&
+          !supportedEfforts.some(
+            (option) =>
+              option.reasoningEffort === parsed.data.reasoningEffort,
+          )
+        ) {
+          return reply.status(400).send({
+            error: `${parsed.data.reasoningEffort} reasoning is not supported by ${selectedModel.displayName}.`,
+          });
+        }
+        runRequest = {
+          ...parsed.data,
+          reasoningEffort:
+            parsed.data.reasoningEffort ??
+            selectedModel.defaultReasoningEffort ??
+            supportedEfforts[0]?.reasoningEffort,
+        };
+      }
+      const run = runManager.start(runRequest);
       return reply.status(202).send({ runId: run.id });
     } catch (error) {
       return reply.status(400).send({

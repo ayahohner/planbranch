@@ -21,6 +21,15 @@ describe("editor history", () => {
       runSummary: null,
       runLogs: [],
       activityOpen: false,
+      modelOptions: [],
+      modelSelectionResolved: false,
+      modelHealth: {
+        status: "checking",
+        name: "gpt-5.3-codex-spark",
+        runtime: "Codex app-server",
+        provider: "OpenAI",
+        reasoningEffort: "xhigh",
+      },
     });
   });
 
@@ -208,6 +217,50 @@ describe("editor history", () => {
 
     useEditorStore.getState().toggleActivityOpen();
     expect(useEditorStore.getState().activityOpen).toBe(false);
+  });
+
+  it("keeps reasoning effort within the selected model's supported list", () => {
+    useEditorStore.getState().setModelCatalog(
+      [
+        {
+          id: "sol",
+          model: "gpt-5.6-sol",
+          displayName: "GPT-5.6 Sol",
+          hidden: false,
+          defaultReasoningEffort: "high",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "high" },
+            { reasoningEffort: "xhigh" },
+          ],
+          isDefault: true,
+        },
+        {
+          id: "terra",
+          model: "gpt-5.6-terra",
+          displayName: "GPT-5.6 Terra",
+          hidden: false,
+          defaultReasoningEffort: "medium",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low" },
+            { reasoningEffort: "medium" },
+          ],
+          isDefault: false,
+        },
+      ],
+      "gpt-5.6-sol",
+      "high",
+    );
+
+    useEditorStore.getState().setSelectedModel("gpt-5.6-terra");
+    expect(useEditorStore.getState().modelHealth).toMatchObject({
+      name: "gpt-5.6-terra",
+      reasoningEffort: "medium",
+    });
+
+    useEditorStore.getState().setSelectedReasoningEffort("low");
+    expect(useEditorStore.getState().modelHealth.reasoningEffort).toBe("low");
+    useEditorStore.getState().setSelectedReasoningEffort("xhigh");
+    expect(useEditorStore.getState().modelHealth.reasoningEffort).toBe("low");
   });
 
   it("restores a saved workspace without restoring an active Run", () => {

@@ -1,3 +1,4 @@
+import { createEmptyTree, type ModelOption } from "../packages/domain/src";
 import { describe, expect, it } from "vitest";
 import type { ServerConfig } from "./config";
 import { buildApp } from "./app";
@@ -22,6 +23,33 @@ const config: ServerConfig = {
   maxRejectedTools: 3,
 };
 
+const models: ModelOption[] = [
+  {
+    id: config.modelName,
+    model: config.modelName,
+    displayName: "Codex Spark",
+    hidden: false,
+    defaultReasoningEffort: "high",
+    supportedReasoningEfforts: [
+      { reasoningEffort: "high", description: "Deep reasoning" },
+      { reasoningEffort: "xhigh", description: "Maximum reasoning" },
+    ],
+    isDefault: true,
+  },
+  {
+    id: "gpt-5.6-terra",
+    model: "gpt-5.6-terra",
+    displayName: "GPT-5.6 Terra",
+    hidden: false,
+    defaultReasoningEffort: "medium",
+    supportedReasoningEfforts: [
+      { reasoningEffort: "medium", description: "Balanced reasoning" },
+      { reasoningEffort: "high", description: "Deeper reasoning" },
+    ],
+    isDefault: false,
+  },
+];
+
 class IdleModel implements ModelClient {
   async runChat(): Promise<ModelMessage> {
     throw new Error("Not used.");
@@ -40,6 +68,7 @@ class IdleModel implements ModelClient {
       provider: "Test",
       version: "test",
       availableModels: [config.modelName],
+      models,
     };
   }
 }
@@ -72,7 +101,66 @@ describe("model service HTTP policy", () => {
         available: true,
         reasoningEffort: "xhigh",
       },
+      models,
     });
+    await app.close();
+  });
+
+  it("passes an available model and supported reasoning effort to a Run", async () => {
+    let capturedRequest: unknown;
+    const runManager = {
+      start: (request: unknown) => {
+        capturedRequest = request;
+        return { id: "example" };
+      },
+    } as unknown as RunManager;
+    const app = await buildApp({
+      config,
+      model: new IdleModel(),
+      runManager,
+    });
+    const tree = createEmptyTree(
+      "00000000-0000-4000-8000-000000000001",
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/runs",
+      payload: {
+        action: "decompose",
+        tree,
+        targetTaskId: tree.root.id,
+        model: "gpt-5.6-terra",
+        reasoningEffort: "high",
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(capturedRequest).toMatchObject({
+      model: "gpt-5.6-terra",
+      reasoningEffort: "high",
+    });
+    await app.close();
+  });
+
+  it("rejects reasoning levels unsupported by the selected model", async () => {
+    const app = await buildApp({ config, model: new IdleModel() });
+    const tree = createEmptyTree(
+      "00000000-0000-4000-8000-000000000001",
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/runs",
+      payload: {
+        action: "decompose",
+        tree,
+        targetTaskId: tree.root.id,
+        model: "gpt-5.6-terra",
+        reasoningEffort: "xhigh",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toContain("not supported");
     await app.close();
   });
 
