@@ -194,6 +194,7 @@
 .task-node {
   position: relative;
   width: 390px;
+  height: 100%;
   overflow: hidden;
   border: 1px solid var(--app-border);
   border-top: 3px solid #96919e;

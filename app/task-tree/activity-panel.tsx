@@ -61,7 +61,11 @@ export function ActivityPanel({
           : "Activity";
 
   return (
-    <aside className="activity-panel" aria-label="Model activity">
+    <aside
+      aria-label="Model activity"
+      className="activity-panel"
+      id="model-activity-panel"
+    >
       <header className="activity-header">
         <div>
           <span className="activity-eyebrow">Model activity</span>

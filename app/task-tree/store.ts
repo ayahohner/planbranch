@@ -125,6 +125,7 @@ interface EditorState {
   failActiveRun: (message: string) => void;
   clearRun: () => void;
   setActivityOpen: (open: boolean) => void;
+  toggleActivityOpen: () => void;
   setModelHealth: (health: ModelHealthState) => void;
 }
 
@@ -570,6 +571,8 @@ export const useEditorStore = create<EditorState>((set) => ({
     }),
 
   setActivityOpen: (activityOpen) => set({ activityOpen }),
+  toggleActivityOpen: () =>
+    set((state) => ({ activityOpen: !state.activityOpen })),
   setModelHealth: (modelHealth) => set({ modelHealth }),
 }));
 

@@ -48,6 +48,7 @@ function ToolbarButton({
 }
 
 export function Toolbar({
+  activityOpen,
   canUndo,
   canRedo,
   modelLabel,
@@ -58,9 +59,10 @@ export function Toolbar({
   onExport,
   onUndo,
   onRedo,
-  onOpenActivity,
+  onToggleActivity,
   locked,
 }: {
+  activityOpen: boolean;
   canUndo: boolean;
   canRedo: boolean;
   modelLabel: string;
@@ -71,7 +73,7 @@ export function Toolbar({
   onExport: () => void;
   onUndo: () => void;
   onRedo: () => void;
-  onOpenActivity: () => void;
+  onToggleActivity: () => void;
   locked: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -132,8 +134,10 @@ export function Toolbar({
       <div className="toolbar-spacer" />
 
       <button
+        aria-controls="model-activity-panel"
+        aria-expanded={activityOpen}
         className="model-status"
-        onClick={onOpenActivity}
+        onClick={onToggleActivity}
         type="button"
       >
         <span

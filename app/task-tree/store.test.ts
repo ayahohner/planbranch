@@ -202,6 +202,14 @@ describe("editor history", () => {
     expect(useEditorStore.getState().future).toEqual([]);
   });
 
+  it("toggles the activity panel in both directions", () => {
+    useEditorStore.getState().toggleActivityOpen();
+    expect(useEditorStore.getState().activityOpen).toBe(true);
+
+    useEditorStore.getState().toggleActivityOpen();
+    expect(useEditorStore.getState().activityOpen).toBe(false);
+  });
+
   it("restores a saved workspace without restoring an active Run", () => {
     const saved = createEmptyTree(rootId);
     saved.root.title = "Restored Brief";

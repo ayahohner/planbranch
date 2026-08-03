@@ -2,7 +2,7 @@
 
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { AlertCircle, CheckCircle2, Info, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   exportTaskTree,
   importTaskTree,
@@ -42,6 +42,9 @@ export function TaskTreeApp() {
   const restoreWorkspace = useEditorStore((state) => state.restoreWorkspace);
   const setNotice = useEditorStore((state) => state.setNotice);
   const setActivityOpen = useEditorStore((state) => state.setActivityOpen);
+  const toggleActivityOpen = useEditorStore(
+    (state) => state.toggleActivityOpen,
+  );
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const {
     startRun,
@@ -49,6 +52,12 @@ export function TaskTreeApp() {
     refreshHealth,
     modelHealth,
   } = useRuns();
+  const runTask = useCallback(
+    (action: RunAction, taskId: string) => {
+      void startRun(action, taskId);
+    },
+    [startRun],
+  );
 
   useEffect(() => {
     try {
@@ -149,6 +158,7 @@ export function TaskTreeApp() {
         <Toolbar
           canRedo={future.length > 0}
           canUndo={history.length > 0}
+          activityOpen={activityOpen}
           locked={Boolean(activeRun)}
           modelLabel={
             activeRun
@@ -162,7 +172,7 @@ export function TaskTreeApp() {
           onExport={exportJson}
           onImport={(file) => void readImport(file)}
           onNew={() => setPendingAction({ type: "new" })}
-          onOpenActivity={() => setActivityOpen(true)}
+          onToggleActivity={toggleActivityOpen}
           onRedo={redo}
           onUndo={undo}
         />
@@ -175,9 +185,7 @@ export function TaskTreeApp() {
             changedFields={activeRun?.changedFields}
             ghostBranches={activeRun?.ghostBranches}
             newTaskIds={activeRun?.newTaskIds}
-            onRun={(action: RunAction, taskId: string) =>
-              void startRun(action, taskId)
-            }
+            onRun={runTask}
             runDisabled={Boolean(activeRun)}
             tree={activeRun?.overlayTree ?? tree}
           />

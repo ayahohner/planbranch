@@ -12,26 +12,15 @@ import {
   type Edge,
   type NodeTypes,
 } from "@xyflow/react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { RunAction, Task, TaskTree } from "../../packages/domain/src";
 import { layoutOrderedTree, type OrderedLayoutNode } from "./ordered-layout";
 import type { GhostBranch } from "./store";
 import { TaskNode, type TaskFlowNode } from "./task-node";
+import { getTaskNodeSize } from "./task-node-size";
+import { shouldFitRoot } from "./viewport-policy";
 
 const nodeTypes: NodeTypes = { task: TaskNode };
-const NODE_WIDTH = 390;
-
-function estimateHeight(task: Task, isRoot: boolean): number {
-  const descriptionLines = Math.max(1, Math.ceil(task.description.length / 48));
-  const artifactRows =
-    Math.ceil(Math.max(task.inputs.length, 1) / 2) +
-    Math.ceil(Math.max(task.outputs.length, 1) / 2);
-  const goalRows =
-    isRoot && "goals" in task
-      ? Math.ceil(Math.max((task.goals as string[]).length, 1) / 2)
-      : 0;
-  return 242 + descriptionLines * 18 + artifactRows * 27 + goalRows * 27;
-}
 
 function buildFlow(
   tree: TaskTree,
@@ -40,7 +29,7 @@ function buildFlow(
   newTaskIds: string[],
   changedFields: Record<string, string[]>,
   ghostBranches: GhostBranch[],
-): { nodes: TaskFlowNode[]; edges: Edge[]; structureKey: string } {
+): { nodes: TaskFlowNode[]; edges: Edge[] } {
   const ghostParentIds = new Set(
     ghostBranches.map((branch) => branch.parentId),
   );
@@ -48,7 +37,6 @@ function buildFlow(
   const nodes: TaskFlowNode[] = [];
   const edges: Edge[] = [];
   const layoutNodes: OrderedLayoutNode[] = [];
-  const structure: string[] = [];
 
   const visit = (
     task: Task,
@@ -57,19 +45,21 @@ function buildFlow(
     isRoot = false,
     removing = false,
   ) => {
-    const height = estimateHeight(task, isRoot);
+    const { height, width } = getTaskNodeSize(task, isRoot);
     layoutNodes.push({
       id: task.id,
       parentId,
       order,
-      width: NODE_WIDTH,
+      width,
       height,
     });
     nodes.push({
       id: task.id,
       type: "task",
       position: { x: 0, y: 0 },
-      style: { width: NODE_WIDTH },
+      height,
+      width,
+      style: { height, width },
       data: {
         task,
         isRoot,
@@ -88,8 +78,6 @@ function buildFlow(
         changedFields: removing ? [] : (changedFields[task.id] ?? []),
       },
     });
-    structure.push(`${parentId ?? "root"}:${task.id}`);
-
     if (parentId) {
       edges.push({
         id: `${parentId}-${task.id}`,
@@ -129,17 +117,22 @@ function buildFlow(
     };
   });
 
-  return { nodes: positioned, edges, structureKey: structure.join("|") };
+  return { nodes: positioned, edges };
 }
 
-function FitOnStructure({ structureKey }: { structureKey: string }) {
+function FitOnRootChange({ rootId }: { rootId: string }) {
   const { fitView } = useReactFlow();
+  const fittedRootId = useRef<string | null>(null);
+
   useEffect(() => {
+    if (!shouldFitRoot(fittedRootId.current, rootId)) return;
+    fittedRootId.current = rootId;
+
     const frame = requestAnimationFrame(() => {
       void fitView({ duration: 420, padding: 0.18, maxZoom: 1 });
     });
     return () => cancelAnimationFrame(frame);
-  }, [fitView, structureKey]);
+  }, [fitView, rootId]);
   return null;
 }
 
@@ -183,7 +176,6 @@ function Canvas({
       colorMode="light"
       defaultEdgeOptions={{ focusable: false }}
       edges={flow.edges}
-      fitView
       maxZoom={1.25}
       minZoom={0.22}
       nodeTypes={nodeTypes}
@@ -202,8 +194,13 @@ function Canvas({
       />
       <Controls position="bottom-left" showInteractive={false} />
       <MiniMap
+        ariaLabel="Task Tree overview"
+        bgColor="#ffffff"
         className="task-minimap"
-        maskColor="rgba(247, 246, 242, 0.78)"
+        maskColor="rgba(247, 246, 242, 0.58)"
+        maskStrokeColor="#6659d6"
+        maskStrokeWidth={2}
+        nodeBorderRadius={14}
         nodeColor={(node) => {
           const kind = node.data?.task
             ? deriveTaskKindSafe(node.data.task as Task)
@@ -214,11 +211,13 @@ function Canvas({
               ? "#d79234"
               : "#96919e";
         }}
+        nodeStrokeColor="#ffffff"
+        nodeStrokeWidth={3}
         position="bottom-right"
         pannable
         zoomable
       />
-      <FitOnStructure structureKey={flow.structureKey} />
+      <FitOnRootChange rootId={tree.root.id} />
     </ReactFlow>
   );
 }
