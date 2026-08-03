@@ -170,8 +170,8 @@ class CodexConnection {
     try {
       const initialized = (await connection.request("initialize", {
         clientInfo: {
-          name: "task_tree",
-          title: "Task Tree",
+          name: "planbranch",
+          title: "Planbranch",
           version: "0.1.0",
         },
         capabilities: {
@@ -312,7 +312,7 @@ function systemInstructions(messages: Message[]): string {
     .join("\n\n");
   return `${supplied}
 
-This is a bounded planning session. Use only the supplied Task Tree tools.
+This is a bounded planning session. Use only the supplied Planbranch planning tools.
 Do not inspect files, run shell commands, browse, delegate, or use unrelated tools.
 Tool results are authoritative. Correct rejected calls before continuing.
 Call finish_run only after every intended mutation is accepted, then stop.`;
@@ -383,7 +383,7 @@ export class CodexAppServerClient implements ModelClient {
         if (message.id !== undefined) {
           connection.respondError(
             message.id,
-            "Task Tree does not support this Codex server request.",
+            "Planbranch does not support this Codex server request.",
           );
         }
         return;
@@ -425,7 +425,7 @@ export class CodexAppServerClient implements ModelClient {
       void Promise.resolve(
         onToolCall
           ? onToolCall(call)
-          : { ok: false, error: "No Task Tree tool handler is available." },
+          : { ok: false, error: "No Planbranch tool handler is available." },
       )
         .then((result) => {
           connection.respond(message.id!, {
@@ -437,7 +437,7 @@ export class CodexAppServerClient implements ModelClient {
         })
         .catch((error: unknown) => {
           const failure =
-            error instanceof Error ? error : new Error("Task Tree tool failed.");
+            error instanceof Error ? error : new Error("Planbranch tool failed.");
           connection.respond(message.id!, {
             contentItems: [
               {

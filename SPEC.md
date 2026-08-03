@@ -1,4 +1,4 @@
-# Task Decomposition App — Implementation Specification
+# Planbranch — Implementation Specification
 
 Status: Prototype specification  
 Version: 0.1  

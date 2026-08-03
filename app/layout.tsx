@@ -29,10 +29,10 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase,
-    title: "Task Tree",
+    title: "Planbranch",
     description,
     openGraph: {
-      title: "Task Tree",
+      title: "Planbranch",
       description,
       type: "website",
       images: [
@@ -40,13 +40,13 @@ export async function generateMetadata(): Promise<Metadata> {
           url: image,
           width: 1731,
           height: 909,
-          alt: "Task Tree ordered decomposition workspace",
+          alt: "Planbranch ordered decomposition workspace",
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Task Tree",
+      title: "Planbranch",
       description,
       images: [image],
     },

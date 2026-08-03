@@ -22,14 +22,14 @@ async function render() {
   );
 }
 
-test("server-renders the Task Tree application shell", async () => {
+test("server-renders the Planbranch application shell", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>Task Tree<\/title>/i);
-  assert.match(html, /Task Tree/);
+  assert.match(html, /<title>Planbranch<\/title>/i);
+  assert.match(html, /Planbranch/);
   assert.match(html, /local planning workspace/);
   assert.match(html, /Ordered decomposition/);
   assert.match(html, /og\.png/);

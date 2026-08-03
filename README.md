@@ -1,6 +1,6 @@
-# Task Tree
+# Planbranch
 
-Task Tree is a local, single-user planning workspace that uses a configurable
+Planbranch is a local, single-user planning workspace that uses a configurable
 model runtime to decompose complex work into a strictly ordered Task Tree.
 Model edits materialize while a Run is in progress, validation and retries
 remain visible, and only successful Runs enter undo history.
@@ -59,7 +59,7 @@ provider-specific UI changes.
 - Use the Activity panel to inspect model mutations, rejected edits,
   validation, retries, cancellation, and rollback.
 
-Task Tree describes Primitive Operators but never executes them.
+Planbranch describes Primitive Operators but never executes them.
 
 ## Architecture
 

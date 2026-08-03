@@ -585,7 +585,7 @@ export class RunManager {
 
     if (response.toolCalls.length === 0) {
       throw new AttemptFailure(
-        "The model stopped before calling a Task Tree tool.",
+        "The model stopped before calling a Planbranch tool.",
       );
     }
     if (!context.finished) {

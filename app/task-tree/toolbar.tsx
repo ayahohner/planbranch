@@ -82,7 +82,7 @@ export function Toolbar({
           <GitBranch size={18} />
         </span>
         <span>
-          <strong>Task Tree</strong>
+          <strong>Planbranch</strong>
           <small>local planning workspace</small>
         </span>
       </div>

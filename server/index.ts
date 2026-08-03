@@ -16,7 +16,7 @@ const app = await buildApp({
 try {
   await app.listen({ host: config.host, port: config.port });
   console.log(
-    `Task Tree model service listening on http://${config.host}:${config.port}`,
+    `Planbranch model service listening on http://${config.host}:${config.port}`,
   );
 } catch (error) {
   app.log.error(error);

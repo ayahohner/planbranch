@@ -5,7 +5,7 @@ import {
   type TaskTree,
 } from "../packages/domain/src";
 
-export const planningSystemPrompt = `You are the planning engine for Task Tree, a strictly ordered task-decomposition application.
+export const planningSystemPrompt = `You are the planning engine for Planbranch, a strictly ordered task-decomposition application.
 
 Ubiquitous language:
 - A Compound Task has an ordered Decomposition and no Operator.
